@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">LifeOS</string>
+    <string name="title_activity_main">LifeOS</string>
+    <string name="package_name">com.aselec.lifeos</string>
+    <string name="custom_url_scheme">com.aselec.lifeos</string>
+    <string name="health_connect_privacy_policy_url">https://lifeos-aselec.web.app/privacypolicy.html</string>
+    <string name="lifeos_widget_desc">LifeOS - Estado de Turno 14x14</string>
+</resources>

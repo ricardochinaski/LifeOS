@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "963980534477",
+    "project_id": "lifeos-aad84",
+    "storage_bucket": "lifeos-aad84.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:963980534477:android:894ed7a0afbdbf56613f84",
+        "android_client_info": {
+          "package_name": "com.aselec.lifeos"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "963980534477-kjgujbarqidr7lm9hci9568esigrrsl3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aselec.lifeos",
+            "certificate_hash": "e470f6c6e261ce3c6149b17d40957c70e5372217"
+          }
+        },
+        {
+          "client_id": "963980534477-he2m24cj9qtrtohfrvla1lamneme46pg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQfkhSAzXqWN195ug4ltnVVLY2e08Aqaw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "963980534477-he2m24cj9qtrtohfrvla1lamneme46pg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

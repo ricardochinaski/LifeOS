@@ -1,0 +1,8 @@
+{
+  "name": "LifeOS - Sistema Unificado de Gestión Personal",
+  "description": "Aplicación modular unificada para tareas, proyectos, hábitos, finanzas personales y biblioteca de lectura con persistencia local y relaciones interconectadas.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

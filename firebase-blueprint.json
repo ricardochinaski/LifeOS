@@ -1,0 +1,19 @@
+{
+  "collections": {
+    "users": {
+      "description": "User profiles and synced LifeOS data state",
+      "documents": {
+        "{userId}": {
+          "fields": {
+            "uid": { "type": "string", "description": "User Google UID" },
+            "email": { "type": "string", "description": "User email address" },
+            "displayName": { "type": "string", "description": "User full name" },
+            "photoURL": { "type": "string", "description": "User profile picture" },
+            "updatedAt": { "type": "string", "description": "ISO timestamp of last cloud sync" },
+            "lifeOSData": { "type": "map", "description": "Synced LifeOS state (tasks, habits, finances, shiftConfig, healthProfile, etc.)" }
+          }
+        }
+      }
+    }
+  }
+}
