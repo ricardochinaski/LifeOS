@@ -62,6 +62,12 @@ export interface Project {
   tags?: string[];
 }
 
+export interface RecurrenceRule {
+  type: 'daily' | 'weekly' | 'monthly';
+  interval: number;
+  endsAfter?: number;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -80,6 +86,8 @@ export interface Task {
   createdAt: string;
   completedAt?: string;
   notifyAt?: string; // HH:mm format for notification reminder
+  recurrence?: RecurrenceRule;
+  completedCount?: number;
 }
 
 export type HabitFrequency = 'daily' | 'weekly' | 'target_times';

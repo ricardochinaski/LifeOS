@@ -136,6 +136,36 @@ export async function scheduleHabitNotifications(habits: { title: string; notify
   }
 }
 
+export async function scheduleTaskNotifications(tasks: { title: string; notifyAt?: string }[]) {
+  if (!isNative()) return;
+  const notifications: ScheduleOptions['notifications'] = [];
+  let id = 5000;
+  for (const task of tasks) {
+    if (!task.notifyAt) continue;
+    const [h, m] = task.notifyAt.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) continue;
+    const time = new Date();
+    time.setHours(h, m, 0, 0);
+    if (time <= new Date()) time.setDate(time.getDate() + 1);
+    notifications.push({
+      id: id++,
+      title: 'Recordatorio de Tarea',
+      body: `Tarea pendiente: ${task.title}`,
+      channelId: 'habit_alerts',
+      schedule: { at: time, repeats: true, every: 'day' },
+      sound: 'default',
+      smallIcon: 'ic_stat_lifeos',
+    });
+  }
+  if (notifications.length > 0) {
+    try {
+      await LocalNotifications.schedule({ notifications });
+    } catch (e) {
+      console.error('Error scheduling task notifications:', e);
+    }
+  }
+}
+
 export async function scheduleShiftNotifications(shiftDay: number, isRestDay: boolean, workDays: number, restDays: number) {
   if (!isNative()) return;
 

@@ -20,6 +20,7 @@ import {
 } from '../lib/firebase';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { isNative } from '../lib/native';
+import { scheduleTaskNotifications } from '../utils/notifications';
 
 interface LifeOSContextType {
   activeTab: TabType;
@@ -667,6 +668,34 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return { success: true, message: `Tarea "${parsed.title}" agregada (${parsed.priority?.toUpperCase()})` };
   };
 
+  // --- Recurrence Helper ---
+  const createNextRecurringTask = (completedTask: Task): Task | null => {
+    if (!completedTask.recurrence) return null;
+    const dueDate = completedTask.dueDate ? new Date(completedTask.dueDate + 'T00:00:00') : new Date();
+    const interval = completedTask.recurrence.interval || 1;
+    switch (completedTask.recurrence.type) {
+      case 'daily': dueDate.setDate(dueDate.getDate() + interval); break;
+      case 'weekly': dueDate.setDate(dueDate.getDate() + 7 * interval); break;
+      case 'monthly': dueDate.setMonth(dueDate.getMonth() + interval); break;
+    }
+    const nextDue = dueDate.toISOString().split('T')[0];
+    const newTask: Task = {
+      ...completedTask,
+      id: `task_${Date.now()}`,
+      status: 'todo',
+      createdAt: new Date().toISOString().split('T')[0],
+      dueDate: nextDue,
+      completedAt: undefined,
+      completedCount: (completedTask.completedCount || 0) + 1,
+    };
+    delete newTask.recurrence;
+    if (completedTask.recurrence.endsAfter && (completedTask.completedCount || 0) + 1 >= completedTask.recurrence.endsAfter) {
+      return null;
+    }
+    newTask.recurrence = completedTask.recurrence;
+    return newTask;
+  };
+
   // --- Task Operations ---
   const addTask = (taskData: Omit<Task, 'id' | 'createdAt'>) => {
     const newTask: Task = {
@@ -676,11 +705,13 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
     setTasks((prev) => [newTask, ...prev]);
     if (currentUser) writeToFirestore(currentUser.uid, 'tasks', newTask.id, newTask);
+    if (newTask.notifyAt) scheduleTaskNotifications([newTask]);
   };
 
   const toggleTaskStatus = (taskId: string) => {
+    let nextTask: Task | null = null;
     setTasks((prev) =>
-      prev.map((task) => {
+      prev.flatMap((task) => {
         if (task.id === taskId) {
           const isCompleting = task.status !== 'completed';
           if (isCompleting) triggerConfetti();
@@ -688,13 +719,21 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             ...task,
             status: isCompleting ? 'completed' : 'todo',
             completedAt: isCompleting ? new Date().toISOString().split('T')[0] : undefined,
+            completedCount: isCompleting ? (task.completedCount || 0) + 1 : task.completedCount,
           };
           if (currentUser) writeToFirestore(currentUser.uid, 'tasks', taskId, updated);
-          return updated;
+          if (isCompleting) {
+            nextTask = createNextRecurringTask(updated);
+          }
+          return nextTask ? [updated, nextTask] : [updated];
         }
-        return task;
+        return [task];
       })
     );
+    if (nextTask && currentUser) {
+      writeToFirestore(currentUser.uid, 'tasks', nextTask.id, nextTask);
+      showToast('Tarea completada. Próxima ocurrencia creada.');
+    }
   };
 
   const deleteTask = (taskId: string) => {
@@ -707,6 +746,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
     if (currentUser) writeToFirestore(currentUser.uid, 'tasks', updatedTask.id, updatedTask);
     showToast('Tarea actualizada.');
+    if (updatedTask.notifyAt) scheduleTaskNotifications([updatedTask]);
   };
 
   const addProject = (projectData: Omit<Project, 'id' | 'createdAt'>) => {
