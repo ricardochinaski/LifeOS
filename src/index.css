@@ -22,6 +22,43 @@
 [data-font="serif"] { font-family: Georgia, Cambria, "Times New Roman", serif; }
 [data-font="mono"] { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
 
+/* Several legacy modules were designed dark-first. Normalize their hard-coded panels in light mode. */
+:root:not(.dark) .lifeos-content .bg-slate-950,
+:root:not(.dark) .lifeos-content .bg-slate-900 {
+  background-color: #ffffff !important;
+  border-color: #dbe3ee !important;
+  color: #0f172a;
+}
+
+:root:not(.dark) .lifeos-content .bg-slate-800,
+:root:not(.dark) .lifeos-content .bg-slate-800\/80,
+:root:not(.dark) .lifeos-content .bg-slate-800\/60,
+:root:not(.dark) .lifeos-content .bg-slate-800\/50 {
+  background-color: #f4f7fb !important;
+  border-color: #dbe3ee !important;
+}
+
+:root:not(.dark) .lifeos-content .bg-slate-950 .text-white,
+:root:not(.dark) .lifeos-content .bg-slate-900 .text-white,
+:root:not(.dark) .lifeos-content .bg-slate-800 .text-white,
+:root:not(.dark) .lifeos-content .bg-slate-800\/80 .text-white,
+:root:not(.dark) .lifeos-content .bg-slate-800\/60 .text-white {
+  color: #0f172a !important;
+}
+
+:root:not(.dark) .lifeos-content .bg-slate-950 .text-slate-300,
+:root:not(.dark) .lifeos-content .bg-slate-900 .text-slate-300,
+:root:not(.dark) .lifeos-content .bg-slate-900 .text-slate-400,
+:root:not(.dark) .lifeos-content .bg-slate-800 .text-slate-300,
+:root:not(.dark) .lifeos-content .bg-slate-800 .text-slate-400 {
+  color: #64748b !important;
+}
+
+:root:not(.dark) .lifeos-content .bg-slate-900 .border-slate-700,
+:root:not(.dark) .lifeos-content .bg-slate-800 .border-slate-700 {
+  border-color: #dbe3ee !important;
+}
+
 /* Density is constrained to page content so navigation and dialogs keep reliable touch targets. */
 [data-density="compact"] .lifeos-content { padding-top: calc(0.75rem + env(safe-area-inset-top, 0px)); }
 [data-density="compact"] .lifeos-content .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem !important; }
