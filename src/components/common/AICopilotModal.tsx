@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
-import { chatWithAI } from '../../lib/api';
+import { chatWithAI, parseVoiceCommand } from '../../lib/api';
 import { Bot, Send, Sparkles, X, User, RefreshCw, HeartPulse, Briefcase, Wallet, CheckSquare, Zap, Mic } from 'lucide-react';
+
+const CHAT_STORAGE_KEY = 'lifeos_chat_messages';
 
 interface Message {
   id: string;
@@ -26,22 +28,12 @@ export const AICopilotModal: React.FC<AICopilotModalProps> = ({ isOpen, onClose 
     accounts,
     showToast,
     openQuickCapture,
-    openVoiceModal
+    openVoiceModal,
+    addHabit,
+    addTask,
   } = useLifeOS();
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `¡Hola! Soy **LifeOS Copilot**, tu asistente de Inteligencia Artificial integrado.
-
-Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}** (Día ${shiftInfo.dayInPhase} en ${shiftInfo.phase === 'work' ? 'Faena' : 'Descanso'}), tus métricas de altitud (${healthProfile.miningAltitudeMeters} msnm) y el estado de tus tareas y finanzas.
-
-¿En qué te puedo asesorar hoy?`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
-
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([
@@ -52,6 +44,49 @@ Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}*
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const loadedRef = useRef(false);
+
+  // Load persisted chat on mount
+  useEffect(() => {
+    if (isOpen && !loadedRef.current) {
+      loadedRef.current = true;
+      try {
+        const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as Message[];
+          if (parsed.length > 0) {
+            setMessages(parsed);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('Error loading chat history:', e);
+      }
+      // Default welcome message if no saved history
+      setMessages([{
+        id: 'welcome',
+        role: 'assistant',
+        content: `¡Hola! Soy **LifeOS Copilot**, tu asistente de Inteligencia Artificial integrado.
+
+Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}** (Día ${shiftInfo.dayInPhase} en ${shiftInfo.phase === 'work' ? 'Faena' : 'Descanso'}), tus métricas de altitud (${healthProfile.miningAltitudeMeters} msnm) y el estado de tus tareas y finanzas.
+
+¿En qué te puedo asesorar hoy?
+
+📌 **Puedes pedirme cosas como:**
+• *"Crea un hábito de leer 20 min diarios"*
+• *"Añade tarea: comprar provisiones"*
+• *"Registra gasto de $15000 en combustible"*`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    }
+  }, [isOpen, shiftConfig, shiftInfo, healthProfile]);
+
+  // Persist messages on change
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+    }
+  }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -66,7 +101,40 @@ Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}*
   if (!isOpen) return null;
 
   const latestBiometrics = healthLogs.length > 0 ? healthLogs[0] : null;
-  const pendingTasksCount = tasks.filter(t => !t.completed).length;
+  const pendingTasksCount = tasks.filter(t => t.status !== 'completed').length;
+
+  const handleExecuteAction = (text: string): string | null => {
+    const result = parseVoiceCommand({ text });
+    if (!result || !result.intent || result.intent === 'unknown') return null;
+
+    const { intent, data } = result;
+
+    if (intent === 'habit' && data.habitTitle) {
+      addHabit({
+        title: data.habitTitle,
+        description: `Creado por LifeOS Copilot`,
+        color: '#10B981',
+        icon: 'Sparkles',
+        frequency: 'daily',
+        targetValue: data.habitTarget || 1,
+        unit: data.habitUnit || 'veces',
+      });
+      return `✅ Hábito creado: **${data.habitTitle}**${data.habitTarget ? ` (${data.habitTarget} ${data.habitUnit || 'veces'})` : ''}`;
+    }
+
+    if (intent === 'task' && data.taskTitle) {
+      addTask({
+        title: data.taskTitle,
+        status: 'todo',
+        priority: data.priority || 'p2',
+        areaId: 'area_work',
+        subtasks: [],
+      });
+      return `✅ Tarea creada: **${data.taskTitle}**${data.priority ? ` (${data.priority.toUpperCase()})` : ''}`;
+    }
+
+    return null;
+  };
 
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputMessage).trim();
@@ -84,6 +152,21 @@ Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}*
     setIsLoading(true);
 
     try {
+      // Try to execute action from user message
+      const actionResult = handleExecuteAction(text);
+      if (actionResult) {
+        const assistantMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: actionResult,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+        setIsLoading(false);
+        return;
+      }
+
+      // If not an action, get AI conversational reply
       const userContext = {
         shiftInfo: {
           workDays: shiftConfig.workDays,
@@ -136,6 +219,17 @@ Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}*
     }
   };
 
+  const handleClearChat = () => {
+    localStorage.removeItem(CHAT_STORAGE_KEY);
+    setMessages([{
+      id: 'welcome',
+      role: 'assistant',
+      content: `Chat reiniciado. ¿En qué puedo ayudarte?`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }]);
+    showToast('Historial de chat eliminado.');
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
       <div className="w-full max-w-3xl h-[85vh] sm:h-[750px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
@@ -160,12 +254,21 @@ Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}*
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-2xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer relative z-10"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClearChat}
+              className="p-2 rounded-2xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer relative z-10"
+              title="Limpiar historial"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-2xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer relative z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Quick Context Chips Bar */}
