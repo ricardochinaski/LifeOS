@@ -102,6 +102,7 @@ export interface Habit {
   linkedBookId?: string;
   shiftContext?: 'all' | 'rest' | 'work';
   notifyAt?: string; // HH:mm format for daily notification reminder
+  timeOfDay?: 'morning' | 'afternoon' | 'evening';
 }
 
 export interface HabitLog {

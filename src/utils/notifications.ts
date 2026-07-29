@@ -106,6 +106,36 @@ export async function cancelAllNotifications() {
   } catch (e) { /* ignore */ }
 }
 
+export async function scheduleHabitNotifications(habits: { title: string; notifyAt?: string }[]) {
+  if (!isNative()) return;
+  const notifications: ScheduleOptions['notifications'] = [];
+  let id = 3000;
+  for (const habit of habits) {
+    if (!habit.notifyAt) continue;
+    const [h, m] = habit.notifyAt.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) continue;
+    const time = new Date();
+    time.setHours(h, m, 0, 0);
+    if (time <= new Date()) time.setDate(time.getDate() + 1);
+    notifications.push({
+      id: id++,
+      title: 'Recordatorio de Hábito',
+      body: `No olvides: ${habit.title}`,
+      channelId: 'habit_alerts',
+      schedule: { at: time, repeats: true, every: 'day' },
+      sound: 'default',
+      smallIcon: 'ic_stat_lifeos',
+    });
+  }
+  if (notifications.length > 0) {
+    try {
+      await LocalNotifications.schedule({ notifications });
+    } catch (e) {
+      console.error('Error scheduling habit notifications:', e);
+    }
+  }
+}
+
 export async function scheduleShiftNotifications(shiftDay: number, isRestDay: boolean, workDays: number, restDays: number) {
   if (!isNative()) return;
 

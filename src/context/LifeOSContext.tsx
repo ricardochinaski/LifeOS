@@ -90,7 +90,9 @@ interface LifeOSContextType {
 
   // Habit Actions
   addHabit: (habit: Omit<Habit, 'id' | 'createdAt' | 'streak' | 'bestStreak'>) => void;
-  logHabit: (habitId: string, dateStr?: string, value?: number) => void;
+  updateHabit: (habit: Habit) => void;
+  logHabit: (habitId: string, dateStr?: string, value?: number, notes?: string) => void;
+  updateHabitLog: (logId: string, updates: Partial<HabitLog>) => void;
   deleteHabit: (habitId: string) => void;
 
   // Finance Actions
@@ -775,17 +777,62 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     showToast(`Hábito "${newHabit.title}" creado.`);
   };
 
-  const logHabit = (habitId: string, dateStr = new Date().toISOString().split('T')[0], value = 1) => {
+  const updateHabit = (updated: Habit) => {
+    setHabits((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+    if (currentUser) writeToFirestore(currentUser.uid, 'habits', updated.id, updated);
+    showToast(`Hábito "${updated.title}" actualizado.`);
+  };
+
+  const recalcStreak = (habitId: string, allLogs: HabitLog[]): { streak: number; bestStreak: number } => {
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return { streak: 0, bestStreak: 0 };
+    const logs = allLogs.filter(l => l.habitId === habitId).map(l => l.date).sort();
+    const logSet = new Set(logs);
+    const bestStreak = habit.bestStreak || 0;
+
+    // Walk backwards from yesterday (today doesn't count as streak continuity until tomorrow)
+    let currentStreak = 0;
+    let allowSkip = true; // 2-day rule: allow one gap
+    const today = new Date().toISOString().split('T')[0];
+    const d = new Date();
+    d.setDate(d.getDate() - 1); // start from yesterday
+
+    while (true) {
+      const dateStr = d.toISOString().split('T')[0];
+      if (logSet.has(dateStr)) {
+        currentStreak++;
+        allowSkip = true;
+        d.setDate(d.getDate() - 1);
+      } else if (dateStr === today) {
+        d.setDate(d.getDate() - 1);
+        continue;
+      } else if (allowSkip) {
+        allowSkip = false;
+        d.setDate(d.getDate() - 1);
+        continue;
+      } else {
+        break;
+      }
+    }
+
+    // Count today separately
+    if (logSet.has(today)) currentStreak++;
+
+    return { streak: currentStreak, bestStreak: Math.max(bestStreak, currentStreak) };
+  };
+
+  const logHabit = (habitId: string, dateStr = new Date().toISOString().split('T')[0], value = 1, notes = '') => {
     const existingLog = habitLogs.find((l) => l.habitId === habitId && l.date === dateStr);
 
     if (existingLog) {
       setHabitLogs((prev) => prev.filter((l) => l.id !== existingLog.id));
       if (currentUser) deleteFromFirestore(currentUser.uid, 'habitLogs', existingLog.id);
+      const remainingLogs = habitLogs.filter(l => l.id !== existingLog.id);
+      const { streak, bestStreak } = recalcStreak(habitId, remainingLogs);
       setHabits((prev) =>
         prev.map((h) => {
           if (h.id === habitId) {
-            const newStreak = Math.max(0, h.streak - 1);
-            const updated = { ...h, streak: newStreak };
+            const updated = { ...h, streak, bestStreak };
             if (currentUser) writeToFirestore(currentUser.uid, 'habits', habitId, updated);
             return updated;
           }
@@ -796,17 +843,17 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } else {
       const newLog: HabitLog = {
         id: `hl_${habitId}_${dateStr}`,
-        habitId, date: dateStr, value, completed: true,
+        habitId, date: dateStr, value, completed: true, notes: notes || undefined,
       };
       setHabitLogs((prev) => [newLog, ...prev]);
       if (currentUser) writeToFirestore(currentUser.uid, 'habitLogs', newLog.id, newLog);
       triggerConfetti();
+      const allLogs = [...habitLogs, newLog];
+      const { streak, bestStreak } = recalcStreak(habitId, allLogs);
       setHabits((prev) =>
         prev.map((h) => {
           if (h.id === habitId) {
-            const newStreak = h.streak + 1;
-            const newBest = Math.max(h.bestStreak, newStreak);
-            const updated = { ...h, streak: newStreak, bestStreak: newBest };
+            const updated = { ...h, streak, bestStreak };
             if (currentUser) writeToFirestore(currentUser.uid, 'habits', habitId, updated);
             return updated;
           }
@@ -814,6 +861,14 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         })
       );
       showToast('¡Hábito registrado con éxito! 🎉');
+    }
+  };
+
+  const updateHabitLog = (logId: string, updates: Partial<HabitLog>) => {
+    setHabitLogs((prev) => prev.map((l) => (l.id === logId ? { ...l, ...updates } : l)));
+    if (currentUser) {
+      const log = habitLogs.find(l => l.id === logId);
+      if (log) writeToFirestore(currentUser.uid, 'habitLogs', logId, { ...log, ...updates });
     }
   };
 
@@ -1155,7 +1210,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         parseQuickCapture, executeQuickCapture,
         addTask, toggleTaskStatus, deleteTask, updateTask,
         addProject, updateProject, deleteProject, toggleProjectMilestone,
-        addHabit, logHabit, deleteHabit,
+        addHabit, updateHabit, logHabit, updateHabitLog, deleteHabit,
         addTransaction, updateTransaction, deleteTransaction,
         addAccount, updateAccount, deleteAccount,
         addBudget, updateBudget, deleteBudget,
