@@ -1,4 +1,4 @@
-import { AreaCategory, Project, Task, Habit, HabitLog, FinancialAccount, Transaction, Budget, Book, ReadingLog, BookNote, HealthProfile, HealthLog } from '../types';
+import { AreaCategory, Project, Task, Habit, HabitLog, FinancialAccount, Transaction, Budget, Book, ReadingLog, BookNote, HealthProfile, HealthLog, Debt } from '../types';
 
 // Helper to get today/yesterday ISO dates
 const getTodayStr = (offsetDays = 0) => {
@@ -216,6 +216,12 @@ export const initialBudgets: Budget[] = [
 ];
 
 export const initialTransactions: Transaction[] = [];
+
+export const initialDebts: Debt[] = [
+  { id: 'debt_1', name: 'TV Samsung 65"', creditor: 'Abcdin', type: 'retail', totalAmount: 890000, remainingAmount: 520000, interestRate: 1.5, monthlyPayment: 37000, totalInstallments: 24, paidInstallments: 10, startDate: '2025-09-15', dueDate: '2027-09-15', color: '#F59E0B' },
+  { id: 'debt_2', name: 'Tarjeta de Crédito BCI', creditor: 'Banco BCI', type: 'credit_card', totalAmount: 2400000, remainingAmount: 1850000, interestRate: 2.8, monthlyPayment: 120000, totalInstallments: 24, paidInstallments: 5, startDate: '2025-12-01', dueDate: '2027-12-01', color: '#EF4444' },
+  { id: 'debt_3', name: 'Préstamo Personal', creditor: 'Banco Estado', type: 'loan', totalAmount: 5000000, remainingAmount: 3200000, interestRate: 0.9, monthlyPayment: 175000, totalInstallments: 36, paidInstallments: 10, startDate: '2024-06-01', dueDate: '2027-06-01', color: '#8B5CF6' },
+];
 
 export const initialBooks: Book[] = [
   {

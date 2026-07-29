@@ -13,7 +13,8 @@ import {
   HeartPulse,
   CheckSquare,
   AlertCircle,
-  Volume2
+  Volume2,
+  Flame
 } from 'lucide-react';
 
 interface VoiceCommandModalProps {
@@ -22,7 +23,7 @@ interface VoiceCommandModalProps {
 }
 
 export const VoiceCommandModal: React.FC<VoiceCommandModalProps> = ({ isOpen, onClose }) => {
-  const { addTransaction, addHealthLog, addTask, financialAccounts, showToast } = useLifeOS();
+  const { addTransaction, addHealthLog, addTask, addHabit, financialAccounts, showToast } = useLifeOS();
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isParsing, setIsParsing] = useState(false);
@@ -152,6 +153,17 @@ export const VoiceCommandModal: React.FC<VoiceCommandModalProps> = ({ isOpen, on
         notes: `Dictado por voz: "${transcript}"`
       });
       showToast('¡Registro biométrico guardado en tu Ficha de Salud!');
+    } else if (intent === 'habit') {
+      addHabit({
+        title: data.habitTitle || transcript || 'Nuevo Hábito',
+        description: `Creado por comando de voz: "${transcript}"`,
+        color: '#10B981',
+        icon: 'Sparkles',
+        frequency: 'daily',
+        targetValue: data.habitTarget || 1,
+        unit: data.habitUnit || 'veces',
+      });
+      showToast('¡Hábito creado exitosamente!');
     } else {
       // Task
       addTask({
@@ -297,6 +309,15 @@ export const VoiceCommandModal: React.FC<VoiceCommandModalProps> = ({ isOpen, on
               className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] text-slate-300 flex items-center gap-1"
             >
               <CheckSquare className="w-3 h-3 text-blue-400" /> "Tarea acreditar salud faena"
+            </button>
+            <button
+              onClick={() => {
+                setTranscript('Crea hábito de leer 20 minutos diarios');
+                handleProcessTranscript('Crea hábito de leer 20 minutos diarios');
+              }}
+              className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] text-slate-300 flex items-center gap-1"
+            >
+              <Flame className="w-3 h-3 text-orange-400" /> "Crea hábito leer 20 min"
             </button>
           </div>
         </div>

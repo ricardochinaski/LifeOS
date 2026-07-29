@@ -11,12 +11,8 @@ import {
   Cloud,
   LogOut,
   RefreshCw,
-  Calendar,
   BellRing,
-  Activity,
-  Mic,
-  Settings,
-  Bot
+  Settings
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -37,11 +33,7 @@ export const Navbar: React.FC = () => {
     signInWithGoogle,
     logout,
     syncToCloud,
-    openAICopilot,
-    openVoiceModal,
-    openCalendarModal,
     openNotificationsModal,
-    openFitModal,
   } = useLifeOS();
 
   const getTodayFormatted = () => {
@@ -176,25 +168,7 @@ export const Navbar: React.FC = () => {
             </button>
           )}
 
-          {/* Integration Action Buttons */}
-          <button
-            onClick={openCalendarModal}
-            className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
-            title="Sincronizar con Google Calendar"
-          >
-            <Calendar className="w-4 h-4" />
-            <span className="text-xs font-bold hidden xl:inline">Calendar</span>
-          </button>
-
-          <button
-            onClick={openFitModal}
-            className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
-            title="Sincronizar con Google Fit"
-          >
-            <Activity className="w-4 h-4" />
-            <span className="text-xs font-bold hidden xl:inline">Fit</span>
-          </button>
-
+          {/* Notifications Button */}
           <button
             onClick={openNotificationsModal}
             className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
@@ -202,25 +176,6 @@ export const Navbar: React.FC = () => {
           >
             <BellRing className="w-4 h-4" />
             <span className="text-xs font-bold hidden xl:inline">Alertas</span>
-          </button>
-
-          <button
-            onClick={() => openVoiceModal()}
-            className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors flex items-center gap-1.5 animate-pulse shrink-0 cursor-pointer"
-            title="Comandos de Voz Rápidos (Dictado por Voz)"
-          >
-            <Mic className="w-4 h-4" />
-            <span className="text-xs font-bold hidden xl:inline">Voz IA</span>
-          </button>
-
-          {/* AI Copilot Button */}
-          <button
-            onClick={openAICopilot}
-            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-slate-950 hover:from-emerald-400 hover:to-teal-400 font-extrabold text-xs shadow-sm transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
-            title="Abrir Asistente IA LifeOS Copilot"
-          >
-            <Bot className="w-4 h-4" />
-            <span className="hidden sm:inline">Copilot IA</span>
           </button>
 
           {/* Quick Capture Button */}

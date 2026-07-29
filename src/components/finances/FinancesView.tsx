@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
-import { FinancialAccount, Transaction, Budget, TransactionType } from '../../types';
+import { FinancialAccount, Transaction, Budget, Debt, TransactionType } from '../../types';
 import {
   PieChart as PieChartIcon,
   Wallet,
@@ -21,7 +21,10 @@ import {
   Sparkles,
   TrendingUp,
   Check,
-  X
+  X,
+  Percent,
+  CalendarDays,
+  BadgePercent
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -57,7 +60,11 @@ export const FinancesView: React.FC = () => {
     deleteAccount,
     addBudget,
     updateBudget,
-    deleteBudget
+    deleteBudget,
+    debts,
+    addDebt,
+    updateDebt,
+    deleteDebt
   } = useLifeOS();
 
   // Filters & Search
@@ -87,6 +94,22 @@ export const FinancesView: React.FC = () => {
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [budCategory, setBudCategory] = useState('Alimentación & Supermercado');
   const [budLimit, setBudLimit] = useState('');
+
+  // Add / Edit Debt State
+  const [isDebtModalOpen, setIsDebtModalOpen] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
+  const [debtName, setDebtName] = useState('');
+  const [debtCreditor, setDebtCreditor] = useState('');
+  const [debtType, setDebtType] = useState<Debt['type']>('credit_card');
+  const [debtTotal, setDebtTotal] = useState('');
+  const [debtRemaining, setDebtRemaining] = useState('');
+  const [debtInterest, setDebtInterest] = useState('');
+  const [debtMonthlyPayment, setDebtMonthlyPayment] = useState('');
+  const [debtTotalInstallments, setDebtTotalInstallments] = useState('');
+  const [debtPaidInstallments, setDebtPaidInstallments] = useState('');
+  const [debtDueDate, setDebtDueDate] = useState('');
+  const [debtStartDate, setDebtStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [debtNotes, setDebtNotes] = useState('');
 
   const todayStr = new Date().toISOString().split('T')[0];
   const currentMonthStr = todayStr.substring(0, 7);
@@ -262,6 +285,83 @@ export const FinancesView: React.FC = () => {
     setIsBudgetModalOpen(false);
   };
 
+  // Debt Handlers
+  const handleOpenNewDebt = () => {
+    setEditingDebt(null);
+    setDebtName('');
+    setDebtCreditor('');
+    setDebtType('credit_card');
+    setDebtTotal('');
+    setDebtRemaining('');
+    setDebtInterest('');
+    setDebtMonthlyPayment('');
+    setDebtTotalInstallments('');
+    setDebtPaidInstallments('');
+    setDebtDueDate('');
+    setDebtStartDate(new Date().toISOString().split('T')[0]);
+    setDebtNotes('');
+    setIsDebtModalOpen(true);
+  };
+
+  const handleOpenEditDebt = (d: Debt) => {
+    setEditingDebt(d);
+    setDebtName(d.name);
+    setDebtCreditor(d.creditor);
+    setDebtType(d.type);
+    setDebtTotal(d.totalAmount.toString());
+    setDebtRemaining(d.remainingAmount.toString());
+    setDebtInterest(d.interestRate?.toString() || '');
+    setDebtMonthlyPayment(d.monthlyPayment?.toString() || '');
+    setDebtTotalInstallments(d.totalInstallments?.toString() || '');
+    setDebtPaidInstallments(d.paidInstallments?.toString() || '');
+    setDebtDueDate(d.dueDate || '');
+    setDebtStartDate(d.startDate);
+    setDebtNotes(d.notes || '');
+    setIsDebtModalOpen(true);
+  };
+
+  const handleSaveDebt = (e: React.FormEvent) => {
+    e.preventDefault();
+    const totalNum = parseFloat(debtTotal);
+    const remainingNum = parseFloat(debtRemaining);
+    if (isNaN(totalNum) || totalNum <= 0) return;
+
+    const debtData: Omit<Debt, 'id'> = {
+      name: debtName,
+      creditor: debtCreditor,
+      type: debtType,
+      totalAmount: totalNum,
+      remainingAmount: isNaN(remainingNum) ? totalNum : remainingNum,
+      interestRate: parseFloat(debtInterest) || undefined,
+      monthlyPayment: parseFloat(debtMonthlyPayment) || undefined,
+      totalInstallments: parseInt(debtTotalInstallments) || undefined,
+      paidInstallments: parseInt(debtPaidInstallments) || undefined,
+      dueDate: debtDueDate || undefined,
+      startDate: debtStartDate,
+      notes: debtNotes || undefined,
+      color: undefined,
+    };
+
+    if (editingDebt) {
+      updateDebt({ ...editingDebt, ...debtData });
+    } else {
+      addDebt(debtData);
+    }
+
+    setIsDebtModalOpen(false);
+  };
+
+  const getDebtTypeLabel = (type: Debt['type']) => {
+    switch (type) {
+      case 'loan': return 'Préstamo';
+      case 'credit_card': return 'Tarjeta de Crédito';
+      case 'retail': return 'Casa Comercial';
+      case 'personal': return 'Personal';
+      case 'mortgage': return 'Hipoteca';
+      default: return 'Otro';
+    }
+  };
+
   const getAccountIcon = (type: FinancialAccount['type']) => {
     switch (type) {
       case 'cash':
@@ -390,8 +490,8 @@ export const FinancesView: React.FC = () => {
                   <p className="text-[11px] font-mono font-bold text-emerald-400">
                     {formatCLP(acc.balance)}
                   </p>
-                </div>
-              </div>
+        </div>
+      </div>
 
               <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                 <button
@@ -413,6 +513,90 @@ export const FinancesView: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Debts & Installments Section */}
+      <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BadgePercent className="w-5 h-5 text-rose-400" />
+            <h3 className="text-base font-extrabold text-white">Cuotas y Deudas</h3>
+            <span className="text-[10px] text-slate-400">
+              ({debts.length} deudas • {formatCLP(debts.reduce((s, d) => s + d.remainingAmount, 0))} restante)
+            </span>
+          </div>
+          <button
+            onClick={handleOpenNewDebt}
+            className="text-xs font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" /> Registrar Deuda
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {debts.map((d) => {
+            const pctPaid = d.totalAmount > 0 ? Math.round(((d.totalAmount - d.remainingAmount) / d.totalAmount) * 100) : 0;
+            return (
+              <div
+                key={d.id}
+                className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 hover:border-rose-700/60 transition-all group"
+              >
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div>
+                    <p className="text-xs font-extrabold text-white">{d.name}</p>
+                    <p className="text-[10px] text-slate-400">{d.creditor} • {getDebtTypeLabel(d.type)}</p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleOpenEditDebt(d)}
+                      className="p-1 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 border border-slate-700 cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => deleteDebt(d.id)}
+                      className="p-1 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 border border-slate-700 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-300">Total: <strong className="text-white">{formatCLP(d.totalAmount)}</strong></span>
+                    <span className="text-rose-400 font-bold">Restan: {formatCLP(d.remainingAmount)}</span>
+                  </div>
+
+                  <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-700">
+                    <div
+                      className="h-full rounded-full transition-all bg-gradient-to-r from-rose-600 to-emerald-500"
+                      style={{ width: `${pctPaid}%` }}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-400">
+                    {d.interestRate != null && <span><Percent className="w-3 h-3 inline mr-0.5" />{d.interestRate}% interés</span>}
+                    {d.monthlyPayment != null && <span>Cuota: {formatCLP(d.monthlyPayment)}</span>}
+                    {d.totalInstallments != null && (
+                      <span>
+                        {d.paidInstallments ?? 0}/{d.totalInstallments} cuotas
+                      </span>
+                    )}
+                    {d.dueDate && (
+                      <span><CalendarDays className="w-3 h-3 inline mr-0.5" />Vence: {d.dueDate}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {debts.length === 0 && (
+            <div className="col-span-full p-6 text-center text-xs text-slate-500">
+              No tienes deudas registradas. Agrega tus cuotas y créditos para hacer seguimiento.
+            </div>
+          )}
         </div>
       </div>
 
@@ -919,6 +1103,91 @@ export const FinancesView: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase"
               >
                 Guardar Presupuesto
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Add / Edit Debt Modal */}
+      {isDebtModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
+          <form
+            onSubmit={handleSaveDebt}
+            className="w-full max-w-lg p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4 animate-scale-in"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                <BadgePercent className="w-5 h-5 text-rose-400" />
+                <span>{editingDebt ? 'Editar Deuda' : 'Registrar Nueva Deuda o Cuota'}</span>
+              </h3>
+              <button type="button" onClick={() => setIsDebtModalOpen(false)} className="p-1 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Nombre de la Deuda</label>
+                <input type="text" value={debtName} onChange={e => setDebtName(e.target.value)} placeholder="Ej: TV Samsung 65" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" required />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Acreedor</label>
+                <input type="text" value={debtCreditor} onChange={e => setDebtCreditor(e.target.value)} placeholder="Ej: Banco BCI" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" required />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Tipo</label>
+                <select value={debtType} onChange={e => setDebtType(e.target.value as Debt['type'])} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white">
+                  <option value="credit_card">Tarjeta de Crédito</option>
+                  <option value="loan">Préstamo</option>
+                  <option value="retail">Casa Comercial</option>
+                  <option value="personal">Personal</option>
+                  <option value="mortgage">Hipoteca</option>
+                  <option value="other">Otro</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Monto Total (CLP)</label>
+                <input type="number" value={debtTotal} onChange={e => setDebtTotal(e.target.value)} placeholder="890000" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" required />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Saldo Restante</label>
+                <input type="number" value={debtRemaining} onChange={e => setDebtRemaining(e.target.value)} placeholder="520000" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Interés Anual %</label>
+                <input type="number" step="0.1" value={debtInterest} onChange={e => setDebtInterest(e.target.value)} placeholder="1.8" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Valor Cuota Mensual</label>
+                <input type="number" value={debtMonthlyPayment} onChange={e => setDebtMonthlyPayment(e.target.value)} placeholder="37000" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Total Cuotas</label>
+                <input type="number" value={debtTotalInstallments} onChange={e => setDebtTotalInstallments(e.target.value)} placeholder="24" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Cuotas Pagadas</label>
+                <input type="number" value={debtPaidInstallments} onChange={e => setDebtPaidInstallments(e.target.value)} placeholder="10" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Vencimiento</label>
+                <input type="date" value={debtDueDate} onChange={e => setDebtDueDate(e.target.value)} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha de Inicio</label>
+                <input type="date" value={debtStartDate} onChange={e => setDebtStartDate(e.target.value)} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Notas</label>
+                <input type="text" value={debtNotes} onChange={e => setDebtNotes(e.target.value)} placeholder="Notas opcionales..." className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setIsDebtModalOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white">Cancelar</button>
+              <button type="submit" className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-black text-xs uppercase">
+                {editingDebt ? 'Guardar Cambios' : 'Registrar Deuda'}
               </button>
             </div>
           </form>

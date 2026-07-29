@@ -20,7 +20,9 @@ import {
   Clock,
   HeartPulse,
   Briefcase,
-  Sparkles
+  Sparkles,
+  CheckSquare,
+  Flame
 } from 'lucide-react';
 
 interface PushNotificationsModalProps {
@@ -32,7 +34,7 @@ export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const { showToast, shiftInfo, shiftConfig } = useLifeOS();
+  const { showToast, shiftInfo, shiftConfig, tasks, habits, addTask, addHabit } = useLifeOS();
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -248,6 +250,44 @@ export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({
               />
             </div>
           </div>
+        </div>
+
+        {/* Tasks with notifications */}
+        <div className="space-y-2 text-xs">
+          <label className="font-bold uppercase tracking-wider text-slate-400">Tareas con Alarma</label>
+          {tasks.filter(t => t.notifyAt && t.status !== 'completed').map(t => (
+            <div key={t.id} className="p-2.5 rounded-2xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-between">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <CheckSquare className="w-4 h-4 text-sky-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-bold text-white text-xs truncate">{t.title}</p>
+                  <p className="text-[10px] text-slate-400">⏰ {t.notifyAt}{t.dueDate ? ` • ${t.dueDate}` : ''}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+          {tasks.filter(t => t.notifyAt && t.status !== 'completed').length === 0 && (
+            <p className="text-[10px] text-slate-500 italic">Sin tareas con alarma. Al crear/editar una tarea puedes activar recordatorio.</p>
+          )}
+        </div>
+
+        {/* Habits with notifications */}
+        <div className="space-y-2 text-xs">
+          <label className="font-bold uppercase tracking-wider text-slate-400">Hábitos con Alarma</label>
+          {habits.filter(h => h.notifyAt).map(h => (
+            <div key={h.id} className="p-2.5 rounded-2xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-between">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Flame className="w-4 h-4 text-orange-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-bold text-white text-xs truncate">{h.title}</p>
+                  <p className="text-[10px] text-slate-400">⏰ {h.notifyAt} • Diario</p>
+                </div>
+              </div>
+            </div>
+          ))}
+          {habits.filter(h => h.notifyAt).length === 0 && (
+            <p className="text-[10px] text-slate-500 italic">Sin hábitos con alarma. Al crear un hábito puedes activar recordatorio.</p>
+          )}
         </div>
 
         <div className="border-t border-slate-800 pt-3 flex items-center justify-between text-[11px] text-slate-400">

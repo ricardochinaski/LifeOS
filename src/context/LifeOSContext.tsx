@@ -2,14 +2,14 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import confetti from 'canvas-confetti';
 import {
   AreaCategory, Project, Task, Habit, HabitLog,
-  FinancialAccount, Transaction, Budget, Book, ReadingLog, BookNote,
+  FinancialAccount, Transaction, Budget, Debt, Book, ReadingLog, BookNote,
   TabType, QuickCaptureParsed, Priority, TaskStatus, ShiftConfig, ShiftInfo, ShiftType,
   HealthProfile, HealthLog
 } from '../types';
 import {
   initialAreas, initialProjects, initialTasks, initialHabits,
   initialHabitLogs, initialAccounts, initialBudgets,
-  initialTransactions, initialBooks, initialReadingLogs, initialBookNotes,
+  initialTransactions, initialDebts, initialBooks, initialReadingLogs, initialBookNotes,
   initialHealthProfile, initialHealthLogs
 } from '../data/seedData';
 import { DEFAULT_SHIFT_CONFIG, calculateShiftInfo, getAnchorDateForDay } from '../utils/shiftUtils';
@@ -52,6 +52,7 @@ interface LifeOSContextType {
   habitLogs: HabitLog[];
   accounts: FinancialAccount[];
   budgets: Budget[];
+  debts: Debt[];
   transactions: Transaction[];
   books: Book[];
   readingLogs: ReadingLog[];
@@ -102,6 +103,9 @@ interface LifeOSContextType {
   addBudget: (budget: Omit<Budget, 'id'>) => void;
   updateBudget: (budget: Budget) => void;
   deleteBudget: (budgetId: string) => void;
+  addDebt: (debt: Omit<Debt, 'id'>) => void;
+  updateDebt: (debt: Debt) => void;
+  deleteDebt: (debtId: string) => void;
 
   // Book Actions
   addBook: (book: Omit<Book, 'id' | 'createdAt'>) => void;
@@ -175,6 +179,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>(initialHabitLogs);
   const [accounts, setAccounts] = useState<FinancialAccount[]>(initialAccounts);
   const [budgets, setBudgets] = useState<Budget[]>(initialBudgets);
+  const [debts, setDebts] = useState<Debt[]>(initialDebts);
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [books, setBooks] = useState<Book[]>(initialBooks);
   const [readingLogs, setReadingLogs] = useState<ReadingLog[]>(initialReadingLogs);
@@ -198,6 +203,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (parsed.habitLogs) setHabitLogs(parsed.habitLogs);
         if (parsed.accounts) setAccounts(parsed.accounts);
         if (parsed.budgets) setBudgets(parsed.budgets);
+        if (parsed.debts) setDebts(parsed.debts);
         if (parsed.transactions) setTransactions(parsed.transactions);
         if (parsed.books) setBooks(parsed.books);
         if (parsed.readingLogs) setReadingLogs(parsed.readingLogs);
@@ -229,6 +235,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             if (remoteData.habitLogs) setHabitLogs(remoteData.habitLogs);
             if (remoteData.accounts) setAccounts(remoteData.accounts);
             if (remoteData.budgets) setBudgets(remoteData.budgets);
+            if (remoteData.debts) setDebts(remoteData.debts);
             if (remoteData.transactions) setTransactions(remoteData.transactions);
             if (remoteData.books) setBooks(remoteData.books);
             if (remoteData.readingLogs) setReadingLogs(remoteData.readingLogs);
@@ -240,7 +247,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             showToast(`Bienvenido ${user.displayName || user.email}. Datos sincronizados desde la nube.`);
           } else {
             const lifeOSData = {
-              tasks, habits, habitLogs, accounts, budgets, transactions,
+              tasks, habits, habitLogs, accounts, budgets, debts, transactions,
               books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
             };
             await setDoc(userDocRef, {
@@ -268,7 +275,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => {
     try {
       const dataToSave = {
-        tasks, habits, habitLogs, accounts, budgets, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
+        tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
 
@@ -296,7 +303,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (e) {
       console.error('Error saving to localStorage:', e);
     }
-  }, [tasks, habits, habitLogs, accounts, budgets, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs, currentUser]);
+  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs, currentUser]);
 
   const signInWithGoogle = async () => {
     setIsSigningIn(true);
@@ -338,7 +345,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     try {
       const userDocRef = doc(db, 'users', currentUser.uid);
       const lifeOSData = {
-        tasks, habits, habitLogs, accounts, budgets, transactions,
+        tasks, habits, habitLogs, accounts, budgets, debts, transactions,
         books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
       };
       await setDoc(userDocRef, {
@@ -818,6 +825,24 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     showToast('Presupuesto eliminado.');
   };
 
+  // --- Debt Operations ---
+  const addDebt = (debtData: Omit<Debt, 'id'>) => {
+    const newDebt: Debt = { ...debtData, id: `debt_${Date.now()}` };
+    setDebts((prev) => [...prev, newDebt]);
+    showToast(`Deuda "${newDebt.name}" registrada.`);
+  };
+
+  const updateDebt = (updatedDebt: Debt) => {
+    setDebts((prev) => prev.map((d) => (d.id === updatedDebt.id ? updatedDebt : d)));
+    showToast(`Deuda "${updatedDebt.name}" actualizada.`);
+  };
+
+  const deleteDebt = (debtId: string) => {
+    const target = debts.find((d) => d.id === debtId);
+    setDebts((prev) => prev.filter((d) => d.id !== debtId));
+    showToast(`Deuda "${target?.name || ''}" eliminada.`);
+  };
+
   // --- Books Operations ---
   const addBook = (bookData: Omit<Book, 'id' | 'createdAt'>) => {
     const newBook: Book = {
@@ -908,7 +933,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Data Export / Reset
   const exportDataJSON = () => {
     const fullData = {
-      tasks, habits, habitLogs, accounts, budgets, transactions, books, readingLogs, bookNotes, projects, healthProfile, healthLogs
+      tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, healthProfile, healthLogs
     };
     const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -926,6 +951,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setHabitLogs(initialHabitLogs);
       setAccounts(initialAccounts);
       setBudgets(initialBudgets);
+      setDebts(initialDebts);
       setTransactions(initialTransactions);
       setBooks(initialBooks);
       setReadingLogs(initialReadingLogs);
@@ -967,6 +993,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         habitLogs,
         accounts,
         budgets,
+        debts,
         transactions,
         books,
         readingLogs,
@@ -1004,6 +1031,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         addBudget,
         updateBudget,
         deleteBudget,
+        addDebt,
+        updateDebt,
+        deleteDebt,
         addBook,
         updateBookProgress,
         updateBookStatus,

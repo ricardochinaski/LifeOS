@@ -174,10 +174,11 @@ INTENCIONES posibles:
 - "expense": gasto, compra, pago, pesos, lucas
 - "income": ingreso, bono, sueldo, recibí
 - "task": tarea, pendiente, recordatorio, agenda
+- "habit": crear hábito, nuevo hábito, leer, meditar, ejercitarme
 
 Devuelve SOLO un JSON:
 {
-  "intent": "health_log|expense|income|task|unknown",
+  "intent": "health_log|expense|income|task|habit|unknown",
   "summary": "resumen breve",
   "data": {
     "amount": number|null,
@@ -187,7 +188,10 @@ Devuelve SOLO un JSON:
     "bloodPressureSys": number|null,
     "bloodPressureDia": number|null,
     "taskTitle": "string|null",
-    "priority": "p1"|"p2"|"p3"|"p4"
+    "priority": "p1"|"p2"|"p3"|"p4",
+    "habitTitle": "string|null",
+    "habitTarget": number|null,
+    "habitUnit": "string|null"
   }
 }`;
 
@@ -223,6 +227,14 @@ function simpleParseVoice(text: string) {
       if (num[2]) val *= 1000;
       data.amount = val;
       data.description = text;
+    }
+  } else if (lower.includes('habito') || lower.includes('hábito') || lower.includes('crea') || lower.includes('nuevo')) {
+    intent = 'habit';
+    data.habitTitle = text.replace(/crea|nuevo|habito|hábito|de|por|para/gi, '').trim() || text;
+    const num = lower.match(/(\d+)\s*(minutos|paginas|veces|ml|litros)/);
+    if (num) {
+      data.habitTarget = parseInt(num[1]);
+      data.habitUnit = num[2];
     }
   } else {
     intent = 'task';

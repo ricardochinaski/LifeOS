@@ -79,6 +79,7 @@ export interface Task {
   shiftContext?: 'all' | 'rest' | 'work'; // 'rest'=Solo Descanso, 'work'=Solo Faena
   createdAt: string;
   completedAt?: string;
+  notifyAt?: string; // HH:mm format for notification reminder
 }
 
 export type HabitFrequency = 'daily' | 'weekly' | 'target_times';
@@ -100,6 +101,7 @@ export interface Habit {
   createdAt: string;
   linkedBookId?: string;
   shiftContext?: 'all' | 'rest' | 'work';
+  notifyAt?: string; // HH:mm format for daily notification reminder
 }
 
 export interface HabitLog {
@@ -147,6 +149,25 @@ export interface Budget {
   period: string; // YYYY-MM
 }
 
+export type DebtType = 'loan' | 'credit_card' | 'retail' | 'personal' | 'mortgage' | 'other';
+
+export interface Debt {
+  id: string;
+  name: string;
+  creditor: string;
+  type: DebtType;
+  totalAmount: number;       // total original debt
+  remainingAmount: number;   // what's left to pay
+  interestRate?: number;     // annual % (e.g. 1.8 for 1.8%)
+  monthlyPayment?: number;   // cuota mensual
+  totalInstallments?: number; // total cuotas (e.g. 12)
+  paidInstallments?: number;  // cuotas pagadas
+  dueDate?: string;          // YYYY-MM-DD
+  startDate: string;         // YYYY-MM-DD
+  notes?: string;
+  color?: string;
+}
+
 export type BookStatus = 'want_to_read' | 'reading' | 'completed' | 'abandoned';
 
 export interface Book {
@@ -187,7 +208,7 @@ export interface BookNote {
   tags?: string[];
 }
 
-export type TabType = 'dashboard' | 'tasks' | 'habits' | 'finances' | 'library' | 'health' | 'calendar' | 'settings';
+export type TabType = 'dashboard' | 'tasks' | 'habits' | 'finances' | 'library' | 'health' | 'settings';
 
 export interface AppCustomSettings {
   primaryColor: 'emerald' | 'blue' | 'purple' | 'amber' | 'rose';

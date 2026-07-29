@@ -20,6 +20,7 @@ export const HabitsView: React.FC = () => {
   const [targetValue, setTargetValue] = useState('1');
   const [unit, setUnit] = useState('veces');
   const [shiftContext, setShiftContext] = useState<'all' | 'rest' | 'work'>('all');
+  const [habitNotifyAt, setHabitNotifyAt] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'rest' | 'work'>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [weekOffset, setWeekOffset] = useState(0);
@@ -36,8 +37,8 @@ export const HabitsView: React.FC = () => {
   const handleCreateHabit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    addHabit({ title, description: desc, areaId, color: '#10B981', icon: 'Sparkles', frequency: 'daily', targetValue: parseFloat(targetValue) || 1, unit, shiftContext });
-    setTitle(''); setDesc(''); setIsAddingHabit(false);
+    addHabit({ title, description: desc, areaId, color: '#10B981', icon: 'Sparkles', frequency: 'daily', targetValue: parseFloat(targetValue) || 1, unit, shiftContext, notifyAt: habitNotifyAt || undefined });
+    setTitle(''); setDesc(''); setHabitNotifyAt(''); setIsAddingHabit(false);
   };
 
   // Week days helpers
@@ -132,7 +133,7 @@ export const HabitsView: React.FC = () => {
               onChange={(e) => setDesc(e.target.value)}
               className="p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white" />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <select value={areaId} onChange={(e) => setAreaId(e.target.value)}
               className="w-full p-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
               {areas.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
@@ -146,6 +147,9 @@ export const HabitsView: React.FC = () => {
               className="w-full p-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
               <option value="all">Siempre</option><option value="rest">Solo Descanso</option><option value="work">Solo Faena</option>
             </select>
+            <input type="time" value={habitNotifyAt} onChange={(e) => setHabitNotifyAt(e.target.value)}
+              className="w-full p-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+              title="Alarma diaria (opcional)" />
           </div>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setIsAddingHabit(false)}

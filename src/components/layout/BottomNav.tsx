@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { TabType } from '../../types';
-import { LayoutDashboard, CheckSquare, Flame, Wallet, BookOpen, HeartPulse, Calendar, Settings } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, Flame, Wallet, BookOpen, HeartPulse, Settings } from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
   const { activeTab, setActiveTab } = useLifeOS();
@@ -13,7 +13,6 @@ export const BottomNav: React.FC = () => {
     { id: 'finances', label: 'Finanzas', icon: Wallet },
     { id: 'library', label: 'Lectura', icon: BookOpen },
     { id: 'health', label: 'Salud', icon: HeartPulse },
-    { id: 'calendar', label: 'Calendario', icon: Calendar },
     { id: 'settings', label: 'Ajustes', icon: Settings },
   ];
 

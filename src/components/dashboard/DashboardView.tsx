@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { ShiftDashboardCard } from './ShiftDashboardCard';
+import { TimerCard } from './TimerCard';
 import {
   Flame, CheckSquare, Wallet, BookOpen, Sparkles, Plus,
   CheckCircle2, Circle, ChevronRight,
@@ -9,6 +10,7 @@ import {
 
 interface WidgetConfig {
   shiftCard: boolean;
+  timer: boolean;
   habits: boolean;
   tasks: boolean;
   finances: boolean;
@@ -18,6 +20,7 @@ interface WidgetConfig {
 
 const DEFAULT_WIDGETS: WidgetConfig = {
   shiftCard: true,
+  timer: true,
   habits: true,
   tasks: true,
   finances: true,
@@ -143,6 +146,9 @@ export const DashboardView: React.FC = () => {
 
       {/* 14x14 Mining Shift Card Widget */}
       {widgetConfig.shiftCard && <ShiftDashboardCard />}
+
+      {/* Timer & Focus Card */}
+      {widgetConfig.timer && <TimerCard />}
 
       {/* Grid Layout for Dashboard Modules */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -505,6 +511,7 @@ export const DashboardView: React.FC = () => {
             <div className="space-y-2">
               {[
                 { key: 'shiftCard', label: 'Rotación Minera 14x14', desc: 'Día actual y contador de faena/descanso' },
+                { key: 'timer', label: 'Temporizadores Enfoque', desc: 'Pomodoro, meditación y ejercicio' },
                 { key: 'habits', label: 'Hábitos del Día', desc: 'Progreso y marcas rápidas' },
                 { key: 'tasks', label: 'Tareas Prioritarias P1/P2', desc: 'Acciones urgentes pendientes' },
                 { key: 'health', label: 'Salud & Biometría', desc: 'Oximetría, sueño y presión arterial' },

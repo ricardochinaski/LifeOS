@@ -5,9 +5,9 @@ import { AiWorkoutPlanner } from './AiWorkoutPlanner';
 import { XiaomiFitnessSyncModal } from './XiaomiFitnessSyncModal';
 import { GoogleFitSyncModal } from '../integrations/GoogleFitSyncModal';
 import {
-  HeartPulse, Activity, ShieldCheck, AlertTriangle, Plus,
-  FileText, PhoneCall, UserCheck, Stethoscope, Droplets, Moon,
-  Sparkles, CheckCircle2, Clock, Trash2, Edit3, X, ChevronRight,
+  HeartPulse, Activity, ShieldCheck, Plus,
+  FileText, PhoneCall, UserCheck, Droplets, Moon,
+  Sparkles, Clock, Trash2, Edit3, X, ChevronRight,
   TrendingUp, Thermometer, ShieldAlert, MapPin, Coffee, Pickaxe, Info, Dumbbell, Watch
 } from 'lucide-react';
 
@@ -31,8 +31,6 @@ export const HealthView: React.FC = () => {
   const [editBloodType, setEditBloodType] = useState(healthProfile.bloodType);
   const [editHeightCm, setEditHeightCm] = useState(healthProfile.heightCm);
   const [editWeightKg, setEditWeightKg] = useState(healthProfile.weightKg);
-  const [editAllergies, setEditAllergies] = useState(healthProfile.allergies.join(', '));
-  const [editConditions, setEditConditions] = useState(healthProfile.chronicConditions.join(', '));
   const [editEmergencyName, setEditEmergencyName] = useState(healthProfile.emergencyContact.name);
   const [editEmergencyKin, setEditEmergencyKin] = useState(healthProfile.emergencyContact.kinship);
   const [editEmergencyPhone, setEditEmergencyPhone] = useState(healthProfile.emergencyContact.phone);
@@ -77,8 +75,8 @@ export const HealthView: React.FC = () => {
       bloodType: editBloodType,
       heightCm: Number(editHeightCm),
       weightKg: Number(editWeightKg),
-      allergies: editAllergies.split(',').map((s) => s.trim()).filter(Boolean),
-      chronicConditions: editConditions.split(',').map((s) => s.trim()).filter(Boolean),
+      allergies: [],
+      chronicConditions: [],
       miningAltitudeMeters: Number(editAltitude),
       emergencyContact: {
         name: editEmergencyName,
@@ -300,30 +298,6 @@ export const HealthView: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-300">Alergias (separadas por coma)</label>
-              <input
-                type="text"
-                value={editAllergies}
-                onChange={(e) => setEditAllergies(e.target.value)}
-                placeholder="Ej. Penicilina, Ácaros"
-                className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-300">Condiciones Crónicas / Antecedentes</label>
-              <input
-                type="text"
-                value={editConditions}
-                onChange={(e) => setEditConditions(e.target.value)}
-                placeholder="Ej. Hipertensión leve, Rinitis"
-                className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white"
-              />
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-2 border-t border-slate-800">
             <div>
               <label className="text-xs font-bold text-slate-300">Contacto de Emergencia</label>
@@ -460,67 +434,6 @@ export const HealthView: React.FC = () => {
                 {healthProfile.emergencyContact.kinship} · <span className="font-mono text-emerald-400">{healthProfile.emergencyContact.phone}</span>
               </p>
               <p className="text-[10px] text-slate-500 truncate">{healthProfile.emergencyContact.insuranceProvider}</p>
-            </div>
-          </div>
-
-          {/* Allergies & Chronic Conditions Card Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Allergies & Alerts */}
-            <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
-              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <div className="p-2.5 rounded-2xl bg-rose-500/20 text-rose-400">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Alergias & Reacciones Conocidas</h3>
-                  <p className="text-xs text-slate-400">Alertas médicas visibles en politrauma o policlínico de faena</p>
-                </div>
-              </div>
-
-              {healthProfile.allergies.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {healthProfile.allergies.map((allergy, idx) => (
-                    <span
-                      key={idx}
-                      className="px-3 py-1.5 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-bold flex items-center gap-2"
-                    >
-                      <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
-                      {allergy}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 italic">No hay alergias registradas.</p>
-              )}
-            </div>
-
-            {/* Antecedentes Médicos & Condiciones */}
-            <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
-              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <div className="p-2.5 rounded-2xl bg-indigo-500/20 text-indigo-400">
-                  <Stethoscope className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Antecedentes & Condiciones Crónicas</h3>
-                  <p className="text-xs text-slate-400">Historial de salud en seguimiento periódico</p>
-                </div>
-              </div>
-
-              {healthProfile.chronicConditions.length > 0 ? (
-                <div className="space-y-2">
-                  {healthProfile.chronicConditions.map((cond, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-2xl bg-slate-800/60 border border-slate-800 text-xs text-slate-300 flex items-center gap-2"
-                    >
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>{cond}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 italic">Sin condiciones crónicas registradas.</p>
-              )}
             </div>
           </div>
         </div>

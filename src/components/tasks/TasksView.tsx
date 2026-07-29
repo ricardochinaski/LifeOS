@@ -31,6 +31,7 @@ export const TasksView: React.FC = () => {
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>('p3');
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newTaskNotifyAt, setNewTaskNotifyAt] = useState<string>('');
   const [newTaskArea, setNewTaskArea] = useState<string>('area_work');
   const [newTaskProject, setNewTaskProject] = useState<string>('');
 
@@ -46,6 +47,7 @@ export const TasksView: React.FC = () => {
   const [editTaskDesc, setEditTaskDesc] = useState('');
   const [editTaskPriority, setEditTaskPriority] = useState<Priority>('p3');
   const [editTaskDueDate, setEditTaskDueDate] = useState('');
+  const [editTaskNotifyAt, setEditTaskNotifyAt] = useState('');
   const [editTaskArea, setEditTaskArea] = useState('');
   const [editTaskProject, setEditTaskProject] = useState('');
   const [editTaskStatus, setEditTaskStatus] = useState<TaskStatus>('todo');
@@ -56,6 +58,7 @@ export const TasksView: React.FC = () => {
     setEditTaskDesc(task.description || '');
     setEditTaskPriority(task.priority);
     setEditTaskDueDate(task.dueDate || '');
+    setEditTaskNotifyAt(task.notifyAt || '');
     setEditTaskArea(task.areaId || 'area_work');
     setEditTaskProject(task.projectId || '');
     setEditTaskStatus(task.status);
@@ -72,7 +75,8 @@ export const TasksView: React.FC = () => {
       dueDate: editTaskDueDate,
       areaId: editTaskArea,
       projectId: editTaskProject || undefined,
-      status: editTaskStatus
+      status: editTaskStatus,
+      notifyAt: editTaskNotifyAt || undefined,
     });
 
     setEditingTask(null);
@@ -99,10 +103,12 @@ export const TasksView: React.FC = () => {
       areaId: newTaskArea,
       projectId: newTaskProject || undefined,
       subtasks: [],
+      notifyAt: newTaskNotifyAt || undefined,
     });
 
     setNewTaskTitle('');
     setNewTaskDesc('');
+    setNewTaskNotifyAt('');
     setIsAddingTask(false);
   };
 
@@ -265,6 +271,13 @@ export const TasksView: React.FC = () => {
               value={newTaskDueDate}
               onChange={(e) => setNewTaskDueDate(e.target.value)}
               className="p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+            <input
+              type="time"
+              value={newTaskNotifyAt}
+              onChange={(e) => setNewTaskNotifyAt(e.target.value)}
+              className="p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              title="Notificación programada (opcional)"
             />
           </div>
 
@@ -635,13 +648,22 @@ export const TasksView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase">Fecha Límite:</label>
                   <input
                     type="date"
                     value={editTaskDueDate}
                     onChange={(e) => setEditTaskDueDate(e.target.value)}
+                    className="w-full mt-1 p-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Alarma:</label>
+                  <input
+                    type="time"
+                    value={editTaskNotifyAt}
+                    onChange={(e) => setEditTaskNotifyAt(e.target.value)}
                     className="w-full mt-1 p-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                   />
                 </div>

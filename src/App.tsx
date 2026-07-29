@@ -8,16 +8,16 @@ import { AICopilotModal } from './components/common/AICopilotModal';
 import { VoiceCommandModal } from './components/common/VoiceCommandModal';
 import { GoogleCalendarSyncModal } from './components/integrations/GoogleCalendarSyncModal';
 import { PushNotificationsModal } from './components/integrations/PushNotificationsModal';
-import { GoogleFitSyncModal } from './components/integrations/GoogleFitSyncModal';
+import { Bot } from 'lucide-react';
+
 import { DashboardView } from './components/dashboard/DashboardView';
 import { TasksView } from './components/tasks/TasksView';
 import { HabitsView } from './components/habits/HabitsView';
 import { FinancesView } from './components/finances/FinancesView';
 import { LibraryView } from './components/library/LibraryView';
 import { HealthView } from './components/health/HealthView';
-import { CalendarView } from './components/calendar/CalendarView';
 import { SettingsView } from './components/settings/SettingsView';
-import { Bot } from 'lucide-react';
+
 
 const MainContent: React.FC = () => {
   const { activeTab } = useLifeOS();
@@ -30,7 +30,6 @@ const MainContent: React.FC = () => {
       {activeTab === 'finances' && <FinancesView />}
       {activeTab === 'library' && <LibraryView />}
       {activeTab === 'health' && <HealthView />}
-      {activeTab === 'calendar' && <CalendarView />}
       {activeTab === 'settings' && <SettingsView />}
     </main>
   );
@@ -42,7 +41,7 @@ const AppContent: React.FC = () => {
     isVoiceModalOpen, closeVoiceModal,
     isCalendarModalOpen, closeCalendarModal,
     isNotificationsModalOpen, closeNotificationsModal,
-    isFitModalOpen, closeFitModal,
+
   } = useLifeOS();
 
   useEffect(() => {
@@ -70,22 +69,14 @@ const AppContent: React.FC = () => {
       <VoiceCommandModal isOpen={isVoiceModalOpen} onClose={closeVoiceModal} />
       <GoogleCalendarSyncModal isOpen={isCalendarModalOpen} onClose={closeCalendarModal} />
       <PushNotificationsModal isOpen={isNotificationsModalOpen} onClose={closeNotificationsModal} />
-      <GoogleFitSyncModal isOpen={isFitModalOpen} onClose={closeFitModal} />
-      
-      {/* Floating AI Copilot Action Button */}
+
+      {/* Floating AI Copilot */}
       <button
         onClick={openAICopilot}
-        className="fixed bottom-20 right-4 sm:bottom-22 sm:right-6 z-30 p-3.5 sm:p-4 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-500 to-indigo-600 text-slate-950 font-black shadow-xl shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 group cursor-pointer"
-        title="Abrir Asistente IA LifeOS Copilot"
+        className="fixed bottom-20 right-4 sm:bottom-24 sm:right-6 z-30 p-3 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+        title="LifeOS Copilot IA"
       >
-        <Bot className="w-6 h-6 text-slate-950 group-hover:rotate-12 transition-transform" />
-        <span className="hidden sm:inline text-xs font-black uppercase tracking-wider text-slate-950 pr-1">
-          Copilot IA
-        </span>
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-        </span>
+        <Bot className="w-5 h-5" />
       </button>
 
       <BottomNav />

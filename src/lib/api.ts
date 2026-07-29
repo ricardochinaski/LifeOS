@@ -133,6 +133,14 @@ function simpleLocalParseVoice(text: string) {
       data.amount = val;
       data.description = text;
     }
+  } else if (lower.includes('habito') || lower.includes('hábito') || lower.includes('crea') || lower.includes('nuevo')) {
+    intent = 'habit';
+    data.habitTitle = text.replace(/crea|nuevo|habito|hábito|de|por|para/gi, '').trim() || text;
+    const num = lower.match(/(\d+)\s*(minutos|paginas|veces|ml|litros)/);
+    if (num) {
+      data.habitTarget = parseInt(num[1]);
+      data.habitUnit = num[2];
+    }
   } else {
     intent = 'task';
     data.taskTitle = text;
