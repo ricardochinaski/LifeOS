@@ -368,20 +368,18 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }
 
           // 2. Load data from Firestore subcollections
-          const hasRemoteData = await loadFromSubcollections(user.uid);
+          await loadFromSubcollections(user.uid);
 
-          // 3. If no remote data exists, upload local data to Firestore (initial sync)
-          if (!hasRemoteData) {
-            const localData = localStorage.getItem(STORAGE_KEY);
-            if (localData) {
-              const parsed = JSON.parse(localData);
-              const hasLocalData = COLLECTIONS.some(colName => {
-                const items = parsed[colName];
-                return items && Array.isArray(items) && items.length > 0;
-              });
-              if (hasLocalData) {
-                await syncToCloud();
-              }
+          // 3. Initial upload: ensure all local data is in Firestore
+          const localData = localStorage.getItem(STORAGE_KEY);
+          if (localData) {
+            const parsed = JSON.parse(localData);
+            const hasLocalData = COLLECTIONS.some(colName => {
+              const items = parsed[colName];
+              return items && Array.isArray(items) && items.length > 0;
+            });
+            if (hasLocalData) {
+              await syncToCloud();
             }
           }
 
