@@ -621,7 +621,22 @@ export const TasksView: React.FC = () => {
       {viewMode === 'list' && (
         <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           {filteredAndSortedTasks.length === 0 ? (
-            <p className="p-8 text-center text-xs text-slate-400">No se encontraron tareas con los filtros seleccionados.</p>
+            <div className="lifeos-ux-empty rounded-3xl p-8 text-center">
+              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300">
+                <CheckSquare className="h-5 w-5" />
+              </div>
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">Sin tareas para esta vista</h3>
+              <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
+                Limpia filtros o captura una accion concreta para mover el dia.
+              </p>
+              <button
+                onClick={() => { setSavedFilter('all'); setSelectedAreaFilter('all'); setSelectedPriorityFilter('all'); setSelectedProjectFilter('all'); setSelectedShiftFilter('all'); setSearchQuery(''); setIsAddingTask(true); }}
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-xs font-black text-slate-950 shadow-sm hover:bg-amber-400"
+              >
+                <Plus className="h-4 w-4" />
+                Crear tarea
+              </button>
+            </div>
           ) : (
             filteredAndSortedTasks.map((t) => renderTaskCard(t))
           )}

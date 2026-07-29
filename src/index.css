@@ -6,6 +6,11 @@
   --color-accent-light: #34d399;
   --color-accent-dark: #059669;
   --density-multiplier: 1;
+  color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
 }
 
 [data-accent="emerald"] { --color-accent: #10b981; --color-accent-light: #34d399; --color-accent-dark: #059669; }
@@ -22,6 +27,115 @@
 [data-font="serif"] { font-family: Georgia, Cambria, "Times New Roman", serif; }
 [data-font="mono"] { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
 
+html {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 28rem),
+    linear-gradient(180deg, #f8fafc 0%, #eef4f8 100%);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+html.dark {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 26rem),
+    linear-gradient(180deg, #020617 0%, #0f172a 100%);
+}
+
+body {
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+button,
+input,
+select,
+textarea {
+  min-height: 2.25rem;
+}
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #ffffff;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.lifeos-shell {
+  background:
+    radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--color-accent) 8%, transparent), transparent 24rem),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 38%, #eef2f7 100%);
+}
+
+.dark .lifeos-shell {
+  background:
+    radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 25rem),
+    linear-gradient(180deg, #020617 0%, #0f172a 42%, #020617 100%);
+}
+
+.lifeos-ux-empty {
+  border: 1px dashed #cbd5e1;
+  background:
+    linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  color: #475569;
+}
+
+.dark .lifeos-ux-empty {
+  border-color: #334155;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.86) 0%, rgba(30, 41, 59, 0.54) 100%);
+  color: #cbd5e1;
+}
+
+.lifeos-ux-pill {
+  border: 1px solid color-mix(in srgb, var(--color-accent) 34%, #cbd5e1);
+  background: color-mix(in srgb, var(--color-accent) 10%, #ffffff);
+  color: color-mix(in srgb, var(--color-accent) 70%, #0f172a);
+}
+
+.dark .lifeos-ux-pill {
+  background: color-mix(in srgb, var(--color-accent) 16%, #020617);
+  color: color-mix(in srgb, var(--color-accent) 72%, #ffffff);
+}
+
 /* Several legacy modules were designed dark-first. Normalize their hard-coded panels in light mode. */
 :root:not(.dark) .lifeos-content .bg-slate-950,
 :root:not(.dark) .lifeos-content .bg-slate-900,
@@ -29,6 +143,13 @@
   background-color: #ffffff !important;
   border-color: #dbe3ee !important;
   color: #0f172a;
+}
+
+:root:not(.dark) .lifeos-content .border-slate-800,
+:root:not(.dark) .lifeos-content .border-slate-700,
+:root:not(.dark) .lifeos-content [class*="border-slate-800/"],
+:root:not(.dark) .lifeos-content [class*="border-slate-700/"] {
+  border-color: #dbe3ee !important;
 }
 
 :root:not(.dark) .lifeos-content .bg-slate-800,
@@ -39,11 +160,17 @@
   border-color: #dbe3ee !important;
 }
 
+:root:not(.dark) .lifeos-content .bg-slate-700,
+:root:not(.dark) .lifeos-content .bg-slate-700\/60 {
+  background-color: #e8eef6 !important;
+}
+
 :root:not(.dark) .lifeos-content .bg-slate-950 .text-white,
 :root:not(.dark) .lifeos-content .bg-slate-900 .text-white,
 :root:not(.dark) .lifeos-content .bg-slate-800 .text-white,
 :root:not(.dark) .lifeos-content .bg-slate-800\/80 .text-white,
-:root:not(.dark) .lifeos-content .bg-slate-800\/60 .text-white {
+:root:not(.dark) .lifeos-content .bg-slate-800\/60 .text-white,
+:root:not(.dark) .lifeos-content .bg-slate-700 .text-white {
   color: #0f172a !important;
 }
 
@@ -86,6 +213,24 @@
   color: #64748b !important;
 }
 
+:root:not(.dark) .lifeos-content input,
+:root:not(.dark) .lifeos-content select,
+:root:not(.dark) .lifeos-content textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+:root:not(.dark) .lifeos-content input::placeholder,
+:root:not(.dark) .lifeos-content textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+:root:not(.dark) .lifeos-content .bg-slate-950\/80,
+:root:not(.dark) .lifeos-content .bg-slate-950\/60 {
+  background-color: rgba(15, 23, 42, 0.56) !important;
+}
+
 /* Density is constrained to page content so navigation and dialogs keep reliable touch targets. */
 [data-density="compact"] .lifeos-content { padding-top: calc(0.75rem + env(safe-area-inset-top, 0px)); }
 [data-density="compact"] .lifeos-content .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem !important; }
@@ -101,3 +246,30 @@
 [data-density="spacious"] .lifeos-content .p-5 { padding: 1.5rem !important; }
 [data-density="spacious"] .lifeos-content .p-4 { padding: 1.25rem !important; }
 [data-density="spacious"] .lifeos-content .gap-6 { gap: 2rem !important; }
+
+@media (max-width: 640px) {
+  .lifeos-content {
+    padding-left: 0.875rem !important;
+    padding-right: 0.875rem !important;
+  }
+
+  .lifeos-content .rounded-3xl {
+    border-radius: 1.125rem !important;
+  }
+
+  .lifeos-content .text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.75rem !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

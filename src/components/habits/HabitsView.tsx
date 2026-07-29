@@ -315,6 +315,7 @@ export const HabitsView: React.FC = () => {
           deleteHabit={deleteHabit}
           timeOfDayIcon={timeOfDayIcon}
           timeOfDayLabel={timeOfDayLabel}
+          openNewHabit={openNewHabit}
         />
       )}
 
@@ -498,10 +499,11 @@ const CardsView: React.FC<{
   deleteHabit: (id: string) => void;
   timeOfDayIcon: (t?: string) => React.ReactNode;
   timeOfDayLabel: (t?: string) => string;
+  openNewHabit: () => void;
 }> = ({
   habits, habitLogs, todayStr, logHabit, openLogNotes,
   openEditHabit, openEditLog, showDeleteConfirm, setShowDeleteConfirm,
-  deleteHabit, timeOfDayIcon, timeOfDayLabel
+  deleteHabit, timeOfDayIcon, timeOfDayLabel, openNewHabit
 }) => {
   const past30: string[] = [];
   for (let i = 29; i >= 0; i--) {
@@ -593,8 +595,21 @@ const CardsView: React.FC<{
         );
       })}
       {habits.length === 0 && (
-        <div className="col-span-full p-10 text-center text-xs text-slate-500">
-          No hay hábitos. Crea tu primer hábito para empezar a hacer seguimiento.
+        <div className="lifeos-ux-empty col-span-full rounded-3xl p-8 text-center">
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300">
+            <Flame className="h-5 w-5" />
+          </div>
+          <h3 className="text-sm font-black text-slate-900 dark:text-white">Sin hábitos en esta vista</h3>
+          <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
+            Agrega uno pequeño y medible. La consistencia se construye mejor con objetivos fáciles de marcar.
+          </p>
+          <button
+            onClick={openNewHabit}
+            className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-500"
+          >
+            <Plus className="h-4 w-4" />
+            Crear hábito
+          </button>
         </div>
       )}
     </div>

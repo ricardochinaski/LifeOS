@@ -209,6 +209,24 @@ export const LibraryView: React.FC = () => {
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">Estante de Libros ({filteredBooks.length})</h2>
 
           <div className="space-y-3">
+            {filteredBooks.length === 0 && (
+              <div className="lifeos-ux-empty rounded-3xl p-7 text-center">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-100 text-purple-600 dark:bg-purple-950/60 dark:text-purple-300">
+                  <BookOpen className="h-5 w-5" />
+                </div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">Sin libros en este estante</h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Cambia el filtro o agrega el siguiente libro de tu lista.
+                </p>
+                <button
+                  onClick={() => setIsAddingBook(true)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-purple-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-purple-500"
+                >
+                  <Plus className="h-4 w-4" />
+                  Agregar libro
+                </button>
+              </div>
+            )}
             {filteredBooks.map((b) => {
               const isSelected = b.id === selectedBook?.id;
               const pct = Math.round((b.currentPage / b.totalPages) * 100);

@@ -109,7 +109,7 @@ export const HealthView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))] animate-fade-in text-white">
+    <div className="space-y-6 max-w-7xl mx-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))] animate-fade-in text-slate-900 dark:text-white">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-6 rounded-3xl shadow-xl backdrop-blur-md">
         <div className="flex items-center gap-4">
