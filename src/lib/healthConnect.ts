@@ -7,6 +7,7 @@ export interface HealthConnectData {
   heartRateBpm: number | null;
   sleepHours: number | null;
   stepsCount: number | null;
+  calories: number | null;
   bloodPressureSys: number | null;
   bloodPressureDia: number | null;
 }
@@ -20,7 +21,7 @@ async function requestPermissions(): Promise<boolean> {
 
   try {
     const result = await Health.requestAuthorization({
-      read: ['oxygenSaturation', 'heartRate', 'sleep', 'steps', 'bloodPressure'],
+      read: ['oxygenSaturation', 'heartRate', 'sleep', 'steps', 'bloodPressure', 'calories'],
       write: [],
     });
     return result !== null;
@@ -58,12 +59,13 @@ export async function syncFromHealthConnect(): Promise<HealthConnectData | null>
       }
     };
 
-    const [oxygenSamples, heartSamples, sleepSamples, stepsSamples, bpSamples] = await Promise.all([
+    const [oxygenSamples, heartSamples, sleepSamples, stepsSamples, bpSamples, caloriesSamples] = await Promise.all([
       readSample('oxygenSaturation'),
       readSample('heartRate'),
       readSample('sleep'),
       readSample('steps'),
       readSample('bloodPressure'),
+      readSample('calories'),
     ]);
 
     const latest = (samples: HealthSample[], key: 'value' | 'systolic' | 'diastolic' = 'value'): number | null => {
@@ -88,6 +90,7 @@ export async function syncFromHealthConnect(): Promise<HealthConnectData | null>
       heartRateBpm: latest(heartSamples),
       sleepHours: sumValues(sleepSamples) !== null ? (sumValues(sleepSamples)! / 3600) : null,
       stepsCount: sumValues(stepsSamples),
+      calories: sumValues(caloriesSamples),
       bloodPressureSys: latest(bpSamples, 'systolic'),
       bloodPressureDia: latest(bpSamples, 'diastolic'),
     };

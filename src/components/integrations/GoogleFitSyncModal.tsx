@@ -45,6 +45,7 @@ export const GoogleFitSyncModal: React.FC<GoogleFitSyncModalProps> = ({ isOpen, 
           heartRate: healthData.heartRateBpm ?? prev.heartRate,
           spO2: healthData.spO2Pct ?? prev.spO2,
           sleepHours: healthData.sleepHours ?? prev.sleepHours,
+          calories: healthData.calories ?? prev.calories,
         }));
 
         addHealthLog({
@@ -54,11 +55,13 @@ export const GoogleFitSyncModal: React.FC<GoogleFitSyncModalProps> = ({ isOpen, 
           heartRateBpm: healthData.heartRateBpm ?? metrics.heartRate,
           sleepHours: healthData.sleepHours ?? metrics.sleepHours,
           sleepQuality: (healthData.sleepHours ?? metrics.sleepHours) >= 7.5 ? 'excelente' : 'buena',
+          steps: healthData.stepsCount ?? metrics.steps,
+          calories: healthData.calories ?? metrics.calories,
           energyLevel: 9,
           bloodPressureSys: healthData.bloodPressureSys ?? 118,
           bloodPressureDia: healthData.bloodPressureDia ?? 76,
           locationContext: 'mine_camp',
-          notes: `Sincronizado vía Health Connect. Pasos: ${(healthData.stepsCount ?? metrics.steps).toLocaleString()}`
+          notes: `Sincronizado vía Health Connect. Pasos: ${(healthData.stepsCount ?? metrics.steps).toLocaleString()} | Calorías: ${(healthData.calories ?? metrics.calories).toLocaleString()} kcal`
         });
 
         setSyncSuccess(true);
@@ -82,6 +85,8 @@ export const GoogleFitSyncModal: React.FC<GoogleFitSyncModalProps> = ({ isOpen, 
         heartRateBpm: metrics.heartRate,
         sleepHours: metrics.sleepHours,
         sleepQuality: metrics.sleepHours >= 7.5 ? 'excelente' : 'buena',
+        steps: metrics.steps,
+        calories: metrics.calories,
         energyLevel: 9,
         bloodPressureSys: 118,
         bloodPressureDia: 76,

@@ -306,6 +306,8 @@ export const initialHealthLogs: HealthLog[] = [
     weightKg: 80.0,
     sleepHours: 8.0,
     sleepQuality: 'excelente',
+    steps: 10420,
+    calories: 2350,
     energyLevel: 9,
     altitudeSymptoms: [],
     locationContext: 'rest_home',

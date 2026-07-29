@@ -148,6 +148,8 @@ export const VoiceCommandModal: React.FC<VoiceCommandModalProps> = ({ isOpen, on
         weightKg: data.weightKg || 78,
         sleepHours: data.sleepHours || 8,
         sleepQuality: 'buena',
+        steps: data.steps || undefined,
+        calories: data.calories || undefined,
         energyLevel: 8,
         locationContext: 'mine_camp',
         notes: `Dictado por voz: "${transcript}"`

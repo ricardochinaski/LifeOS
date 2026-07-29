@@ -260,6 +260,9 @@ export interface HealthLog {
   weightKg?: number;
   sleepHours?: number;
   sleepQuality?: 'excelente' | 'buena' | 'regular' | 'mala';
+  steps?: number;
+  calories?: number;
+  bodyFatPct?: number;
   energyLevel?: number;
   altitudeSymptoms?: string[];
   locationContext?: 'rest_home' | 'mine_camp' | 'transit';
