@@ -17,3 +17,23 @@
 [data-density="compact"]    { --density-multiplier: 0.65; }
 [data-density="comfortable"]{ --density-multiplier: 1;    }
 [data-density="spacious"]   { --density-multiplier: 1.35; }
+
+[data-font="sans"] { font-family: ui-sans-serif, system-ui, sans-serif; }
+[data-font="serif"] { font-family: Georgia, Cambria, "Times New Roman", serif; }
+[data-font="mono"] { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+
+/* Density is constrained to page content so navigation and dialogs keep reliable touch targets. */
+[data-density="compact"] .lifeos-content { padding-top: calc(0.75rem + env(safe-area-inset-top, 0px)); }
+[data-density="compact"] .lifeos-content .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem !important; }
+[data-density="compact"] .lifeos-content .p-6 { padding: 1rem !important; }
+[data-density="compact"] .lifeos-content .p-5 { padding: 0.875rem !important; }
+[data-density="compact"] .lifeos-content .p-4 { padding: 0.75rem !important; }
+[data-density="compact"] .lifeos-content .gap-6 { gap: 1rem !important; }
+[data-density="compact"] .lifeos-content .rounded-3xl { border-radius: 1rem !important; }
+
+[data-density="spacious"] .lifeos-content { padding-top: calc(2rem + env(safe-area-inset-top, 0px)); }
+[data-density="spacious"] .lifeos-content .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 2rem !important; }
+[data-density="spacious"] .lifeos-content .p-6 { padding: 2rem !important; }
+[data-density="spacious"] .lifeos-content .p-5 { padding: 1.5rem !important; }
+[data-density="spacious"] .lifeos-content .p-4 { padding: 1.25rem !important; }
+[data-density="spacious"] .lifeos-content .gap-6 { gap: 2rem !important; }

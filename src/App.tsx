@@ -24,7 +24,7 @@ const MainContent: React.FC = () => {
   const { activeTab } = useLifeOS();
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(1.5rem+env(safe-area-inset-top,0px))]">
+    <main className="lifeos-content max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(1.5rem+env(safe-area-inset-top,0px))]">
       {activeTab === 'dashboard' && <DashboardView />}
       {activeTab === 'tasks' && <TasksView />}
       {activeTab === 'habits' && <HabitsView />}
@@ -42,26 +42,17 @@ const AppContent: React.FC = () => {
     isVoiceModalOpen, closeVoiceModal,
     isCalendarModalOpen, closeCalendarModal,
     isNotificationsModalOpen, closeNotificationsModal,
-
+    appSettings,
   } = useLifeOS();
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('lifeos_custom_settings');
-      if (saved) {
-        const settings = JSON.parse(saved);
-        if (settings.primaryColor) {
-          document.documentElement.setAttribute('data-accent', settings.primaryColor);
-        }
-        if (settings.uiDensity) {
-          document.documentElement.setAttribute('data-density', settings.uiDensity);
-        }
-      }
-    } catch {}
-  }, []);
+    document.documentElement.setAttribute('data-accent', appSettings.primaryColor);
+    document.documentElement.setAttribute('data-density', appSettings.uiDensity);
+    document.documentElement.setAttribute('data-font', appSettings.fontFamily);
+  }, [appSettings.primaryColor, appSettings.uiDensity, appSettings.fontFamily]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors selection:bg-emerald-500 selection:text-white pb-[calc(5rem+env(safe-area-inset-bottom,0px))] relative">
+    <div className="lifeos-shell min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors selection:bg-emerald-500 selection:text-white pb-[calc(5rem+env(safe-area-inset-bottom,0px))] relative">
       <Navbar />
       <MainContent />
       <QuickCaptureModal />
