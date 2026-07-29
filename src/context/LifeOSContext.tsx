@@ -270,7 +270,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     await Promise.all(writes);
   };
 
-  const loadFromSubcollections = async (uid: string) => {
+  const loadFromSubcollections = async (uid: string): Promise<boolean> => {
     const counts: Record<string, number> = {};
     const promises = COLLECTIONS.map(async (colName) => {
       try {
@@ -288,22 +288,21 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     });
     // Load single config docs
-    promises.push(
+    await Promise.all([
+      ...promises,
       getDoc(doc(db, 'users', uid, 'config', 'shift')).then(snap => {
         if (snap.exists()) setShiftConfig(snap.data() as ShiftConfig);
-      }).catch(e => console.error('Error loading shift config:', e))
-    );
-    promises.push(
+      }).catch(e => console.error('Error loading shift config:', e)),
       getDoc(doc(db, 'users', uid, 'config', 'healthProfile')).then(snap => {
         if (snap.exists()) setHealthProfile(snap.data() as HealthProfile);
-      }).catch(e => console.error('Error loading health profile:', e))
-    );
-    await Promise.all(promises);
+      }).catch(e => console.error('Error loading health profile:', e)),
+    ]);
     const loaded = Object.entries(counts).filter(([, c]) => c > 0).length;
     if (loaded > 0) {
       const summary = Object.entries(counts).filter(([, c]) => c > 0).map(([k, c]) => `${k}:${c}`).join(', ');
       showToast(`Datos cargados desde la nube (${summary})`);
     }
+    return loaded > 0;
   };
 
   const setupSnapshotListeners = (uid: string) => {
@@ -369,9 +368,24 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }
 
           // 2. Load data from Firestore subcollections
-          await loadFromSubcollections(user.uid);
+          const hasRemoteData = await loadFromSubcollections(user.uid);
 
-          // 3. Set up real-time listeners
+          // 3. If no remote data exists, upload local data to Firestore (initial sync)
+          if (!hasRemoteData) {
+            const localData = localStorage.getItem(STORAGE_KEY);
+            if (localData) {
+              const parsed = JSON.parse(localData);
+              const hasLocalData = COLLECTIONS.some(colName => {
+                const items = parsed[colName];
+                return items && Array.isArray(items) && items.length > 0;
+              });
+              if (hasLocalData) {
+                await syncToCloud();
+              }
+            }
+          }
+
+          // 4. Set up real-time listeners
           setupSnapshotListeners(user.uid);
         } catch (error) {
           console.error('Error loading Firestore data:', error);
