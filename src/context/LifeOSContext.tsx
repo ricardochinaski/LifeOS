@@ -271,15 +271,20 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const loadFromSubcollections = async (uid: string) => {
+    const counts: Record<string, number> = {};
     const promises = COLLECTIONS.map(async (colName) => {
       try {
-        const snapshot = await getDocs(query(col(uid, colName), orderBy('createdAt', 'desc')));
+        const snapshot = await getDocs(col(uid, colName));
         if (!snapshot.empty) {
           const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
           setterMap[colName](data);
+          counts[colName] = data.length;
+        } else {
+          counts[colName] = 0;
         }
       } catch (e) {
         console.error(`Error loading ${colName}:`, e);
+        counts[colName] = -1;
       }
     });
     // Load single config docs
@@ -294,13 +299,18 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }).catch(e => console.error('Error loading health profile:', e))
     );
     await Promise.all(promises);
+    const loaded = Object.entries(counts).filter(([, c]) => c > 0).length;
+    if (loaded > 0) {
+      const summary = Object.entries(counts).filter(([, c]) => c > 0).map(([k, c]) => `${k}:${c}`).join(', ');
+      showToast(`Datos cargados desde la nube (${summary})`);
+    }
   };
 
   const setupSnapshotListeners = (uid: string) => {
     teardownListeners();
     for (const colName of COLLECTIONS) {
       const unsub = onSnapshot(
-        query(col(uid, colName), orderBy('createdAt', 'desc')),
+        col(uid, colName),
         (snapshot) => {
           const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
           setterMap[colName](data);
