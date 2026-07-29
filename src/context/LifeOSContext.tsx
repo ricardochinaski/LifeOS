@@ -106,6 +106,7 @@ interface LifeOSContextType {
   addDebt: (debt: Omit<Debt, 'id'>) => void;
   updateDebt: (debt: Debt) => void;
   deleteDebt: (debtId: string) => void;
+  payDebt: (debtId: string, amount: number, accountId: string) => void;
 
   // Book Actions
   addBook: (book: Omit<Book, 'id' | 'createdAt'>) => void;
@@ -835,19 +836,27 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setAccounts((prev) =>
       prev.map((acc) => {
         if (acc.id === newTx.accountId) {
-          const delta = newTx.type === 'expense' ? -newTx.amount : newTx.amount;
+          const delta = newTx.type === 'expense' || newTx.type === 'transfer' ? -newTx.amount : newTx.amount;
           return { ...acc, balance: acc.balance + delta };
+        }
+        if (newTx.transferToAccountId && acc.id === newTx.transferToAccountId) {
+          return { ...acc, balance: acc.balance + newTx.amount };
         }
         return acc;
       })
     );
     if (currentUser) {
       writeToFirestore(currentUser.uid, 'transactions', newTx.id, newTx);
-      // Also update the account balance in Firestore
       const acc = accounts.find(a => a.id === newTx.accountId);
       if (acc) {
-        const delta = newTx.type === 'expense' ? -newTx.amount : newTx.amount;
+        const delta = newTx.type === 'expense' || newTx.type === 'transfer' ? -newTx.amount : newTx.amount;
         writeToFirestore(currentUser.uid, 'accounts', acc.id, { ...acc, balance: acc.balance + delta });
+      }
+      if (newTx.transferToAccountId) {
+        const destAcc = accounts.find(a => a.id === newTx.transferToAccountId);
+        if (destAcc) {
+          writeToFirestore(currentUser.uid, 'accounts', destAcc.id, { ...destAcc, balance: destAcc.balance + newTx.amount });
+        }
       }
     }
     if (newTx.type === 'expense') checkBudgetAlert(newTx, budgets, transactions);
@@ -877,8 +886,11 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setAccounts((prev) =>
         prev.map((acc) => {
           if (acc.id === target.accountId) {
-            const reverseDelta = target.type === 'expense' ? target.amount : -target.amount;
+            const reverseDelta = target.type === 'expense' || target.type === 'transfer' ? target.amount : -target.amount;
             return { ...acc, balance: acc.balance + reverseDelta };
+          }
+          if (target.transferToAccountId && acc.id === target.transferToAccountId) {
+            return { ...acc, balance: acc.balance - target.amount };
           }
           return acc;
         })
@@ -887,8 +899,14 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         deleteFromFirestore(currentUser.uid, 'transactions', txId);
         const acc = accounts.find(a => a.id === target.accountId);
         if (acc) {
-          const reverseDelta = target.type === 'expense' ? target.amount : -target.amount;
+          const reverseDelta = target.type === 'expense' || target.type === 'transfer' ? target.amount : -target.amount;
           writeToFirestore(currentUser.uid, 'accounts', acc.id, { ...acc, balance: acc.balance + reverseDelta });
+        }
+        if (target.transferToAccountId) {
+          const destAcc = accounts.find(a => a.id === target.transferToAccountId);
+          if (destAcc) {
+            writeToFirestore(currentUser.uid, 'accounts', destAcc.id, { ...destAcc, balance: destAcc.balance - target.amount });
+          }
         }
       }
     }
@@ -954,6 +972,38 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setDebts((prev) => prev.filter((d) => d.id !== debtId));
     if (currentUser) deleteFromFirestore(currentUser.uid, 'debts', debtId);
     showToast(`Deuda "${target?.name || ''}" eliminada.`);
+  };
+
+  const payDebt = (debtId: string, amount: number, accountId: string) => {
+    const debt = debts.find((d) => d.id === debtId);
+    if (!debt) return;
+    const newRemaining = Math.max(0, debt.remainingAmount - amount);
+    const newPaid = (debt.paidInstallments ?? 0) + 1;
+    const updatedDebt = { ...debt, remainingAmount: newRemaining, paidInstallments: newPaid };
+    setDebts((prev) => prev.map((d) => (d.id === debtId ? updatedDebt : d)));
+    const newTx: Transaction = {
+      id: `tx_${Date.now()}`,
+      accountId,
+      type: 'expense',
+      amount,
+      category: 'Deudas & Cuotas',
+      description: `Pago cuota: ${debt.name} (${debt.creditor})`,
+      date: new Date().toISOString().split('T')[0],
+    };
+    setTransactions((prev) => [newTx, ...prev]);
+    setAccounts((prev) =>
+      prev.map((acc) => {
+        if (acc.id === accountId) return { ...acc, balance: acc.balance - amount };
+        return acc;
+      })
+    );
+    if (currentUser) {
+      writeToFirestore(currentUser.uid, 'debts', debtId, updatedDebt);
+      writeToFirestore(currentUser.uid, 'transactions', newTx.id, newTx);
+      const acc = accounts.find(a => a.id === accountId);
+      if (acc) writeToFirestore(currentUser.uid, 'accounts', accountId, { ...acc, balance: acc.balance - amount });
+    }
+    showToast(`Pago registrado: $${amount.toLocaleString('es-CL')} a ${debt.name}. Saldo restante: $${newRemaining.toLocaleString('es-CL')}`);
   };
 
   // --- Books Operations ---
@@ -1109,7 +1159,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         addTransaction, updateTransaction, deleteTransaction,
         addAccount, updateAccount, deleteAccount,
         addBudget, updateBudget, deleteBudget,
-        addDebt, updateDebt, deleteDebt,
+        addDebt, updateDebt, deleteDebt, payDebt,
         addBook, updateBookProgress, updateBookStatus, addBookNote,
         exportDataJSON, resetToDefaults,
         toastMessage, showToast,

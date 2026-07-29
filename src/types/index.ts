@@ -135,7 +135,8 @@ export interface Transaction {
   category: string;
   areaId?: string;
   description: string;
-  date: string; // YYYY-MM-DD
+  date: string;
+  transferToAccountId?: string;
   linkedProjectId?: string;
   linkedTaskId?: string;
   linkedBookId?: string;

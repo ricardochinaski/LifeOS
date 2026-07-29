@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { FinancialAccount, Transaction, Budget, Debt, TransactionType } from '../../types';
 import {
@@ -24,7 +24,11 @@ import {
   X,
   Percent,
   CalendarDays,
-  BadgePercent
+  BadgePercent,
+  ArrowLeftRight,
+  AlertTriangle,
+  FolderKanban,
+  ListChecks
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -36,7 +40,9 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend
+  Legend,
+  LineChart,
+  Line
 } from 'recharts';
 
 export const formatCLP = (amount: number) => {
@@ -64,7 +70,10 @@ export const FinancesView: React.FC = () => {
     debts,
     addDebt,
     updateDebt,
-    deleteDebt
+    deleteDebt,
+    payDebt,
+    projects,
+    tasks
   } = useLifeOS();
 
   // Filters & Search
@@ -80,7 +89,21 @@ export const FinancesView: React.FC = () => {
   const [txCategory, setTxCategory] = useState('Alimentación & Supermercado');
   const [txDesc, setTxDesc] = useState('');
   const [txAccountId, setTxAccountId] = useState(accounts[0]?.id || 'acc_1');
+  const [txToAccountId, setTxToAccountId] = useState(accounts[1]?.id || accounts[0]?.id || '');
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
+  const [txLinkedProjectId, setTxLinkedProjectId] = useState('');
+  const [txLinkedTaskId, setTxLinkedTaskId] = useState('');
+
+  // Pay Debt State
+  const [payDebtTarget, setPayDebtTarget] = useState<Debt | null>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payAccountId, setPayAccountId] = useState(accounts[0]?.id || '');
+
+  // Confirmation State
+  const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  // Tasks filtered by selected project
+  const tasksByProject = txLinkedProjectId ? tasks.filter(t => t.projectId === txLinkedProjectId) : [];
 
   // Add / Edit Account State
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -144,15 +167,39 @@ export const FinancesView: React.FC = () => {
     { name: 'Este Mes (CLP)', Ingresos: thisMonthIncome, Gastos: thisMonthExpenses }
   ];
 
-  // Filtered Transactions
-  const filteredTransactions = transactions.filter((t) => {
-    const matchesSearch =
-      t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = selectedTypeFilter === 'all' || t.type === selectedTypeFilter;
-    const matchesAccount = selectedAccountFilter === 'all' || t.accountId === selectedAccountFilter;
-    return matchesSearch && matchesType && matchesAccount;
-  });
+  // Monthly Evolution (last 6 months)
+  const monthlyEvolution = useMemo(() => {
+    const months: { month: string; Ingresos: number; Gastos: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const income = transactions
+        .filter(t => t.type === 'income' && t.date.startsWith(m))
+        .reduce((s, t) => s + t.amount, 0);
+      const expense = transactions
+        .filter(t => t.type === 'expense' && t.date.startsWith(m))
+        .reduce((s, t) => s + t.amount, 0);
+      months.push({
+        month: d.toLocaleString('es-CL', { month: 'short' }),
+        Ingresos: income,
+        Gastos: expense,
+      });
+    }
+    return months;
+  }, [transactions]);
+
+  // Filtered Transactions (sorted by date desc)
+  const filteredTransactions = [...transactions]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .filter((t) => {
+      const matchesSearch =
+        t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.category.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesType = selectedTypeFilter === 'all' || t.type === selectedTypeFilter;
+      const matchesAccount = selectedAccountFilter === 'all' || t.accountId === selectedAccountFilter;
+      return matchesSearch && matchesType && matchesAccount;
+    });
 
   // Handlers
   const handleOpenNewTx = () => {
@@ -162,7 +209,10 @@ export const FinancesView: React.FC = () => {
     setTxCategory('Alimentación & Supermercado');
     setTxDesc('');
     setTxAccountId(accounts[0]?.id || 'acc_1');
+    setTxToAccountId(accounts[1]?.id || accounts[0]?.id || '');
     setTxDate(todayStr);
+    setTxLinkedProjectId('');
+    setTxLinkedTaskId('');
     setIsTxModalOpen(true);
   };
 
@@ -173,7 +223,10 @@ export const FinancesView: React.FC = () => {
     setTxCategory(tx.category);
     setTxDesc(tx.description);
     setTxAccountId(tx.accountId);
+    setTxToAccountId(tx.transferToAccountId || accounts[1]?.id || accounts[0]?.id || '');
     setTxDate(tx.date || todayStr);
+    setTxLinkedProjectId(tx.linkedProjectId || '');
+    setTxLinkedTaskId(tx.linkedTaskId || '');
     setIsTxModalOpen(true);
   };
 
@@ -190,16 +243,22 @@ export const FinancesView: React.FC = () => {
         category: txCategory,
         description: txDesc || txCategory,
         accountId: txAccountId,
-        date: txDate
+        transferToAccountId: txType === 'transfer' ? txToAccountId : undefined,
+        date: txDate,
+        linkedProjectId: txLinkedProjectId || undefined,
+        linkedTaskId: txLinkedTaskId || undefined,
       });
     } else {
       addTransaction({
         accountId: txAccountId,
         type: txType,
         amount: amountNum,
-        category: txCategory,
-        description: txDesc || txCategory,
-        date: txDate
+        category: txCategory === 'Transferencia' ? 'Transferencia' : txCategory,
+        description: txDesc || (txType === 'transfer' ? `Transferencia a ${accounts.find(a => a.id === txToAccountId)?.name || 'otra cuenta'}` : txCategory),
+        transferToAccountId: txType === 'transfer' ? txToAccountId : undefined,
+        date: txDate,
+        linkedProjectId: txLinkedProjectId || undefined,
+        linkedTaskId: txLinkedTaskId || undefined,
       });
     }
 
@@ -349,6 +408,25 @@ export const FinancesView: React.FC = () => {
     }
 
     setIsDebtModalOpen(false);
+  };
+
+  const handlePayDebt = (d: Debt) => {
+    setPayDebtTarget(d);
+    setPayAmount((d.monthlyPayment || Math.round(d.remainingAmount / (d.totalInstallments || 1))).toString());
+    setPayAccountId(accounts[0]?.id || '');
+  };
+
+  const confirmPayDebt = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payDebtTarget) return;
+    const amount = parseFloat(payAmount);
+    if (isNaN(amount) || amount <= 0) return;
+    payDebt(payDebtTarget.id, amount, payAccountId);
+    setPayDebtTarget(null);
+  };
+
+  const handleDeleteWithConfirm = (message: string, onDelete: () => void) => {
+    setConfirmAction({ message, onConfirm: onDelete });
   };
 
   const getDebtTypeLabel = (type: Debt['type']) => {
@@ -503,7 +581,7 @@ export const FinancesView: React.FC = () => {
                 </button>
                 {accounts.length > 1 && (
                   <button
-                    onClick={() => deleteAccount(acc.id)}
+                    onClick={() => handleDeleteWithConfirm(`¿Eliminar la cuenta "${acc.name}"? Las transacciones vinculadas se conservarán.`, () => deleteAccount(acc.id))}
                     title="Eliminar Cuenta"
                     className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
                   >
@@ -549,13 +627,20 @@ export const FinancesView: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
+                      onClick={() => handlePayDebt(d)}
+                      title="Pagar Cuota"
+                      className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 cursor-pointer"
+                    >
+                      <DollarSign className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => handleOpenEditDebt(d)}
                       className="p-1 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 border border-slate-700 cursor-pointer"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => deleteDebt(d.id)}
+                      onClick={() => handleDeleteWithConfirm(`¿Eliminar la deuda "${d.name}"?`, () => deleteDebt(d.id))}
                       className="p-1 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 border border-slate-700 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -687,7 +772,7 @@ export const FinancesView: React.FC = () => {
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => deleteBudget(b.id)}
+                        onClick={() => handleDeleteWithConfirm(`¿Eliminar presupuesto de "${b.category}" (${formatCLP(b.monthlyLimit)})?`, () => deleteBudget(b.id))}
                         className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -707,6 +792,35 @@ export const FinancesView: React.FC = () => {
               );
             })}
           </div>
+        </div>
+      </div>
+
+      {/* Monthly Evolution Chart */}
+      <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+        <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-emerald-400" />
+          <span>Evolución Mensual (últimos 6 meses)</span>
+        </h3>
+        <div className="h-56">
+          {monthlyEvolution.some(m => m.Ingresos > 0 || m.Gastos > 0) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyEvolution}>
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  formatter={(val: number) => [formatCLP(val), '']}
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', color: '#cbd5e1' }} />
+                <Bar dataKey="Ingresos" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                <Bar dataKey="Gastos" fill="#F43F5E" radius={[4, 4, 0, 0]} maxBarSize={24} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-xs text-slate-500">
+              Datos insuficientes para mostrar evolución mensual.
+            </div>
+          )}
         </div>
       </div>
 
@@ -742,15 +856,16 @@ export const FinancesView: React.FC = () => {
           </div>
 
           {/* Type Filter */}
-          <select
-            value={selectedTypeFilter}
-            onChange={(e) => setSelectedTypeFilter(e.target.value as any)}
-            className="w-full p-2 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
-          >
-            <option value="all">Todos los Movimientos</option>
-            <option value="income">Solo Ingresos (+)</option>
-            <option value="expense">Solo Gastos (-)</option>
-          </select>
+            <select
+              value={selectedTypeFilter}
+              onChange={(e) => setSelectedTypeFilter(e.target.value as any)}
+              className="w-full p-2 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+            >
+              <option value="all">Todos los Movimientos</option>
+              <option value="income">Solo Ingresos (+)</option>
+              <option value="expense">Solo Gastos (-)</option>
+              <option value="transfer">Solo Transferencias (⇄)</option>
+            </select>
 
           {/* Account Filter */}
           <select
@@ -780,12 +895,16 @@ export const FinancesView: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <div
                       className={`p-2.5 rounded-xl ${
-                        t.type === 'expense'
+                        t.type === 'transfer'
+                          ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                          : t.type === 'expense'
                           ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                           : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       }`}
                     >
-                      {t.type === 'expense' ? (
+                      {t.type === 'transfer' ? (
+                        <ArrowLeftRight className="w-4 h-4" />
+                      ) : t.type === 'expense' ? (
                         <ArrowDownRight className="w-4 h-4" />
                       ) : (
                         <ArrowUpRight className="w-4 h-4" />
@@ -794,7 +913,11 @@ export const FinancesView: React.FC = () => {
                     <div>
                       <p className="text-xs font-bold text-white">{t.description}</p>
                       <p className="text-[10px] text-slate-400">
-                        {t.category} • <strong className="text-slate-300">{acc?.name || 'Cuenta'}</strong> • {t.date}
+                        {t.category} • <strong className="text-slate-300">{acc?.name || 'Cuenta'}</strong>
+                        {t.transferToAccountId && <> → <strong className="text-sky-400">{accounts.find(a => a.id === t.transferToAccountId)?.name || 'Destino'}</strong></>}
+                        {t.linkedProjectId && <> · <FolderKanban className="w-3 h-3 inline" /> {projects.find(p => p.id === t.linkedProjectId)?.name}</>}
+                        {t.linkedTaskId && <> · <ListChecks className="w-3 h-3 inline" /> {tasks.find(ta => ta.id === t.linkedTaskId)?.title}</>}
+                        {' · '}{t.date}
                       </p>
                     </div>
                   </div>
@@ -802,10 +925,10 @@ export const FinancesView: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <span
                       className={`text-xs font-black font-mono ${
-                        t.type === 'expense' ? 'text-rose-400' : 'text-emerald-400'
+                        t.type === 'transfer' ? 'text-sky-400' : t.type === 'expense' ? 'text-rose-400' : 'text-emerald-400'
                       }`}
                     >
-                      {t.type === 'expense' ? '-' : '+'}{formatCLP(t.amount)}
+                      {t.type === 'transfer' ? '⇄ ' : t.type === 'expense' ? '-' : '+'}{formatCLP(t.amount)}
                     </span>
 
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
@@ -817,7 +940,7 @@ export const FinancesView: React.FC = () => {
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => deleteTransaction(t.id)}
+                        onClick={() => handleDeleteWithConfirm(`¿Eliminar transacción "${t.description || t.category}" por ${formatCLP(t.amount)}?`, () => deleteTransaction(t.id))}
                         title="Eliminar Transacción"
                         className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
                       >
@@ -840,10 +963,11 @@ export const FinancesView: React.FC = () => {
 
       {/* Add / Edit Transaction Modal */}
       {isTxModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }} onClick={() => setIsTxModalOpen(false)}>
           <form
             onSubmit={handleSaveTx}
             className="w-full max-w-lg p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-extrabold text-white flex items-center gap-2">
@@ -869,6 +993,7 @@ export const FinancesView: React.FC = () => {
                 >
                   <option value="expense">Gasto (-)</option>
                   <option value="income">Ingreso (+)</option>
+                  <option value="transfer">Transferencia ⇄</option>
                 </select>
               </div>
 
@@ -893,6 +1018,7 @@ export const FinancesView: React.FC = () => {
                   value={txCategory}
                   onChange={(e) => setTxCategory(e.target.value)}
                   className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white focus:ring-2 focus:ring-sky-500"
+                  disabled={txType === 'transfer'}
                 >
                   <option value="Alimentación & Supermercado">Alimentación & Supermercado</option>
                   <option value="Tecnología & Herramientas">Tecnología & Herramientas</option>
@@ -902,11 +1028,14 @@ export const FinancesView: React.FC = () => {
                   <option value="Ocio & Entretenimiento">Ocio & Entretenimiento</option>
                   <option value="Vivienda & Servicios">Vivienda & Servicios</option>
                   <option value="Transporte & Bencina">Transporte & Bencina</option>
+                  <option value="Deudas & Cuotas">Deudas & Cuotas</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Cuenta Destino/Origen:</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">
+                  {txType === 'transfer' ? 'Cuenta Origen:' : 'Cuenta Destino/Origen:'}
+                </label>
                 <select
                   value={txAccountId}
                   onChange={(e) => setTxAccountId(e.target.value)}
@@ -919,6 +1048,22 @@ export const FinancesView: React.FC = () => {
                   ))}
                 </select>
               </div>
+              {txType === 'transfer' && (
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Cuenta Destino:</label>
+                  <select
+                    value={txToAccountId}
+                    onChange={(e) => setTxToAccountId(e.target.value)}
+                    className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white focus:ring-2 focus:ring-sky-500"
+                  >
+                    {accounts.filter(a => a.id !== txAccountId).map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({formatCLP(acc.balance)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div>
@@ -942,6 +1087,39 @@ export const FinancesView: React.FC = () => {
               />
             </div>
 
+            {projects.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Vincular a Proyecto:</label>
+                  <select
+                    value={txLinkedProjectId}
+                    onChange={(e) => { setTxLinkedProjectId(e.target.value); setTxLinkedTaskId(''); }}
+                    className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white focus:ring-2 focus:ring-sky-500"
+                  >
+                    <option value="">Sin proyecto</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {txLinkedProjectId && tasksByProject.length > 0 && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Vincular a Tarea:</label>
+                    <select
+                      value={txLinkedTaskId}
+                      onChange={(e) => setTxLinkedTaskId(e.target.value)}
+                      className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white focus:ring-2 focus:ring-sky-500"
+                    >
+                      <option value="">Sin tarea</option>
+                      {tasksByProject.map((t) => (
+                        <option key={t.id} value={t.id}>{t.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <button
                 type="button"
@@ -963,10 +1141,11 @@ export const FinancesView: React.FC = () => {
 
       {/* Add / Edit Account Modal */}
       {isAccountModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }} onClick={() => setIsAccountModalOpen(false)}>
           <form
             onSubmit={handleSaveAccount}
             className="w-full max-w-md p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-extrabold text-white flex items-center gap-2">
@@ -1042,10 +1221,11 @@ export const FinancesView: React.FC = () => {
 
       {/* Add / Edit Budget Modal */}
       {isBudgetModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }} onClick={() => setIsBudgetModalOpen(false)}>
           <form
             onSubmit={handleSaveBudget}
             className="w-full max-w-md p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-extrabold text-white flex items-center gap-2">
@@ -1111,10 +1291,11 @@ export const FinancesView: React.FC = () => {
 
       {/* Add / Edit Debt Modal */}
       {isDebtModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }} onClick={() => setIsDebtModalOpen(false)}>
           <form
             onSubmit={handleSaveDebt}
             className="w-full max-w-lg p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-extrabold text-white flex items-center gap-2">
@@ -1191,6 +1372,68 @@ export const FinancesView: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Pay Debt Modal */}
+      {payDebtTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }} onClick={() => setPayDebtTarget(null)}>
+          <form onSubmit={confirmPayDebt} className="w-full max-w-md p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-400" />
+                <span>Pagar Cuota: {payDebtTarget.name}</span>
+              </h3>
+              <button type="button" onClick={() => setPayDebtTarget(null)} className="p-1 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="text-xs text-slate-300 space-y-1 p-3 rounded-2xl bg-slate-800/60 border border-slate-700">
+              <p>Acreedor: <strong className="text-white">{payDebtTarget.creditor}</strong></p>
+              <p>Restante: <strong className="text-rose-400">{formatCLP(payDebtTarget.remainingAmount)}</strong></p>
+              {payDebtTarget.monthlyPayment && <p>Cuota habitual: <strong className="text-emerald-400">{formatCLP(payDebtTarget.monthlyPayment)}</strong></p>}
+              {payDebtTarget.paidInstallments != null && payDebtTarget.totalInstallments != null && (
+                <p>Progreso: <strong className="text-white">{payDebtTarget.paidInstallments}/{payDebtTarget.totalInstallments}</strong> cuotas</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Monto a Pagar ($):</label>
+                <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono" required min={1} max={payDebtTarget.remainingAmount} />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Desde Cuenta:</label>
+                <select value={payAccountId} onChange={(e) => setPayAccountId(e.target.value)} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white">
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>{acc.name} ({formatCLP(acc.balance)})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onClick={() => setPayDebtTarget(null)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white">Cancelar</button>
+              <button type="submit" className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase shadow-lg">Registrar Pago</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setConfirmAction(null)}>
+          <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <p className="text-sm font-bold text-white">{confirmAction.message}</p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button onClick={() => setConfirmAction(null)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white">Cancelar</button>
+              <button onClick={() => { confirmAction.onConfirm(); setConfirmAction(null); }} className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black text-xs uppercase shadow-lg">Eliminar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
