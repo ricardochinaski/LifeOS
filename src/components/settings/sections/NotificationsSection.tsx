@@ -179,9 +179,9 @@ export const NotificationsSection: React.FC = () => {
                   value={time}
                   onChange={(e) => updateNotificationTime(notif.id as NotificationTypeId, e.target.value)}
                   disabled={!isEnabled}
-                  className="text-[10px] bg-transparent border-none text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded px-1 ${
+                  className={`text-[10px] bg-transparent border-none text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded px-1 ${
                     !isEnabled ? 'opacity-50 cursor-not-allowed' : ''
-                  }"}
+                  }`}
                 />
               </div>
             </div>

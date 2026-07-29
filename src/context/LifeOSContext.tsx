@@ -158,6 +158,22 @@ const STORAGE_KEY = 'lifeos_local_v1';
 
 const LifeOSContext = createContext<LifeOSContextType | undefined>(undefined);
 
+const removeUndefinedFields = (value: any): any => {
+  if (Array.isArray(value)) {
+    return value.map(removeUndefinedFields);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .map(([key, entryValue]) => [key, removeUndefinedFields(entryValue)])
+    );
+  }
+
+  return value;
+};
+
 // Firestore subcollection helpers
 const col = (uid: string, sub: string) => collection(db, 'users', uid, sub);
 const docRef = (uid: string, sub: string, id: string) => doc(db, 'users', uid, sub, id);
@@ -278,7 +294,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (items && Array.isArray(items)) {
         for (const item of items) {
           if (item.id) {
-            writes.push(setDoc(docRef(uid, colName, item.id), item).catch(e =>
+            writes.push(setDoc(docRef(uid, colName, item.id), removeUndefinedFields(item)).catch(e =>
               console.error(`Error migrating ${colName}/${item.id}:`, e)
             ));
           }
@@ -287,10 +303,10 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
     // Single config docs
     if (lifeOSData.shiftConfig) {
-      writes.push(setDoc(doc(db, 'users', uid, 'config', 'shift'), lifeOSData.shiftConfig));
+      writes.push(setDoc(doc(db, 'users', uid, 'config', 'shift'), removeUndefinedFields(lifeOSData.shiftConfig)));
     }
     if (lifeOSData.healthProfile) {
-      writes.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), lifeOSData.healthProfile));
+      writes.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), removeUndefinedFields(lifeOSData.healthProfile)));
     }
     await Promise.all(writes);
   };
@@ -361,9 +377,10 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Write helper: updates local state AND writes to Firestore
   const writeToFirestore = async (uid: string, sub: string, id: string, data: any) => {
     try {
-      await setDoc(docRef(uid, sub, id), data);
+      await setDoc(docRef(uid, sub, id), removeUndefinedFields(data));
     } catch (e) {
       console.error(`Error writing ${sub}/${id} to Firestore:`, e);
+      showToast(`No se pudo sincronizar ${sub}. Revisa la consola.`);
     }
   };
 
@@ -487,8 +504,8 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       for (const n of bookNotes) allWrites.push(writeToFirestore(uid, 'bookNotes', n.id, n));
       for (const p of projects) allWrites.push(writeToFirestore(uid, 'projects', p.id, p));
       for (const l of healthLogs) allWrites.push(writeToFirestore(uid, 'healthLogs', l.id, l));
-      allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'shift'), shiftConfig));
-      allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), healthProfile));
+      allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'shift'), removeUndefinedFields(shiftConfig)));
+      allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), removeUndefinedFields(healthProfile)));
       await Promise.all(allWrites);
       showToast('Sincronizado con Google Cloud Firestore ✓');
     } catch (error) {
@@ -515,9 +532,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       anchorDate: newAnchorDate,
     }));
     if (currentUser) {
-      setDoc(doc(db, 'users', currentUser.uid, 'config', 'shift'), {
+      setDoc(doc(db, 'users', currentUser.uid, 'config', 'shift'), removeUndefinedFields({
         restDays, workDays, currentPhase: phase, currentDayInPhase: dayInPhase, anchorDate: newAnchorDate
-      }, { merge: true }).catch(e => console.error('Error saving shift config:', e));
+      }), { merge: true }).catch(e => console.error('Error saving shift config:', e));
     }
     showToast(`Turno calibrado: Día ${dayInPhase} de ${dayInPhase > restDays ? workDays : restDays} (${phase === 'rest' ? 'Descanso' : 'Faena Minera'})`);
   };
@@ -1198,7 +1215,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setHealthProfile((prev) => {
       const updated = { ...prev, ...partialProfile };
       if (currentUser) {
-        setDoc(doc(db, 'users', currentUser.uid, 'config', 'healthProfile'), updated, { merge: true })
+        setDoc(doc(db, 'users', currentUser.uid, 'config', 'healthProfile'), removeUndefinedFields(updated), { merge: true })
           .catch(e => console.error('Error saving health profile:', e));
       }
       return updated;
