@@ -313,3 +313,56 @@ export interface QuickCaptureParsed {
   bookTitle?: string;
   pages?: number;
 }
+
+export interface ReadingGroup {
+  id: string;
+  name: string;
+  description: string;
+  bookId: string;
+  ownerId: string;
+  memberIds: string[];
+  schedule: {
+    type: 'weekly' | 'biweekly' | 'monthly' | 'custom';
+    dayOfWeek?: number;
+    time?: string;
+  };
+  status: 'active' | 'paused' | 'completed';
+  progress: number; // percentage
+  currentPage: number;
+  targetPage: number;
+  membersCount: number;
+  messages?: any[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMeetingDate?: string;
+  nextMeetingDate?: string;
+}
+
+export interface ReadingSession {
+  id: string;
+  bookId: string;
+  groupId?: string;
+  userId: string;
+  date: string;
+  startTime: string;
+  endTime?: string;
+  pagesRead: number;
+  duration: number; // in minutes
+  notes?: string;
+  createdAt: string;
+}
+
+export interface ReadingSession {
+  id: string;
+  bookId: string;
+  groupId?: string;
+  userId: string;
+  date: string;
+  startTime: string;
+  endTime?: string;
+  pagesRead: number;
+  duration: number; // in minutes
+  notes?: string;
+  createdAt: string;
+}

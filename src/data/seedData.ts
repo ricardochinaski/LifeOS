@@ -1,4 +1,4 @@
-import { AreaCategory, Project, Task, Habit, HabitLog, FinancialAccount, Transaction, Budget, Book, ReadingLog, BookNote, HealthProfile, HealthLog, Debt } from '../types';
+import { AreaCategory, Project, Task, Habit, HabitLog, FinancialAccount, Transaction, Budget, Book, ReadingLog, BookNote, HealthProfile, HealthLog, Debt, ReadingGroup, ReadingSession } from '../types';
 
 // Helper to get today/yesterday ISO dates
 const getTodayStr = (offsetDays = 0) => {

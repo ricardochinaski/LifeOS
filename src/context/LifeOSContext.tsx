@@ -4,7 +4,7 @@ import {
   AreaCategory, Project, Task, Habit, HabitLog,
   FinancialAccount, Transaction, Budget, Debt, Book, ReadingLog, BookNote,
   TabType, QuickCaptureParsed, Priority, TaskStatus, ShiftConfig, ShiftInfo, ShiftType,
-  HealthProfile, HealthLog
+  HealthProfile, HealthLog, ReadingGroup, ReadingSession
 } from '../types';
 import {
   initialAreas, initialProjects, initialTasks, initialHabits,
@@ -58,6 +58,8 @@ interface LifeOSContextType {
   books: Book[];
   readingLogs: ReadingLog[];
   bookNotes: BookNote[];
+  readingGroups: ReadingGroup[];
+  readingSessions: ReadingSession[];
   healthProfile: HealthProfile;
   healthLogs: HealthLog[];
 
@@ -116,6 +118,17 @@ interface LifeOSContextType {
   updateBookProgress: (bookId: string, newPage: number, notes?: string) => void;
   updateBookStatus: (bookId: string, status: Book['status']) => void;
   addBookNote: (note: Omit<BookNote, 'id' | 'createdAt'>) => void;
+  startReadingSession: (bookId: string, groupId?: string, notes?: string) => void;
+  endReadingSession: (sessionId: string) => void;
+  updateReadingSession: (sessionId: string, updates: Partial<ReadingSession>) => void;
+
+  // Reading Group Actions
+  createReadingGroup: (group: Omit<ReadingGroup, 'id' | 'createdAt' | 'updatedAt' | 'progress'>) => void;
+  updateReadingGroup: (group: ReadingGroup) => void;
+  deleteReadingGroup: (groupId: string) => void;
+  updateReadingGroupProgress: (groupId: string, progress: number, currentPage: number) => void;
+  addReadingGroupMember: (groupId: string, memberId: string) => void;
+  removeReadingGroupMember: (groupId: string, memberId: string) => void;
 
   // Export / Reset
   exportDataJSON: () => void;
@@ -146,7 +159,7 @@ const col = (uid: string, sub: string) => collection(db, 'users', uid, sub);
 const docRef = (uid: string, sub: string, id: string) => doc(db, 'users', uid, sub, id);
 
 // List of collection names to migrate/load
-const COLLECTIONS = ['tasks', 'habits', 'habitLogs', 'accounts', 'budgets', 'debts', 'transactions', 'books', 'readingLogs', 'bookNotes', 'projects', 'healthLogs'] as const;
+const COLLECTIONS = ['tasks', 'habits', 'habitLogs', 'accounts', 'budgets', 'debts', 'transactions', 'books', 'readingLogs', 'bookNotes', 'readingGroups', 'readingSessions', 'projects', 'healthLogs'] as const;
 
 export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -194,6 +207,8 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [books, setBooks] = useState<Book[]>(initialBooks);
   const [readingLogs, setReadingLogs] = useState<ReadingLog[]>(initialReadingLogs);
   const [bookNotes, setBookNotes] = useState<BookNote[]>(initialBookNotes);
+  const [readingGroups, setReadingGroups] = useState<ReadingGroup[]>([]);
+  const [readingSessions, setReadingSessions] = useState<ReadingSession[]>([]);
   const [healthProfile, setHealthProfile] = useState<HealthProfile>(initialHealthProfile);
   const [healthLogs, setHealthLogs] = useState<HealthLog[]>(initialHealthLogs);
 
