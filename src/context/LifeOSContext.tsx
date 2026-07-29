@@ -4,13 +4,13 @@ import {
   AreaCategory, Project, Task, Habit, HabitLog,
   FinancialAccount, Transaction, Budget, Debt, Book, ReadingLog, BookNote,
   TabType, QuickCaptureParsed, Priority, TaskStatus, ShiftConfig, ShiftInfo, ShiftType,
-  HealthProfile, HealthLog, ReadingGroup, ReadingSession
+  HealthProfile, HealthLog, ReadingGroup, ReadingSession, AppCustomSettings
 } from '../types';
 import {
   initialAreas, initialProjects, initialTasks, initialHabits,
   initialHabitLogs, initialAccounts, initialBudgets,
   initialTransactions, initialDebts, initialBooks, initialReadingLogs, initialBookNotes,
-  initialHealthProfile, initialHealthLogs
+  initialHealthProfile, initialHealthLogs, initialAppSettings
 } from '../data/seedData';
 import { DEFAULT_SHIFT_CONFIG, calculateShiftInfo, getAnchorDateForDay } from '../utils/shiftUtils';
 import { updateWidgetData } from '../lib/widgetBridge';
@@ -148,6 +148,10 @@ interface LifeOSContextType {
   isFitModalOpen: boolean;
   openFitModal: () => void;
   closeFitModal: () => void;
+
+  // App Settings
+  appSettings: AppCustomSettings;
+  updateAppSettings: (partial: Partial<AppCustomSettings>) => void;
 }
 
 const STORAGE_KEY = 'lifeos_local_v1';
@@ -211,6 +215,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [readingSessions, setReadingSessions] = useState<ReadingSession[]>([]);
   const [healthProfile, setHealthProfile] = useState<HealthProfile>(initialHealthProfile);
   const [healthLogs, setHealthLogs] = useState<HealthLog[]>(initialHealthLogs);
+  const [appSettings, setAppSettings] = useState<AppCustomSettings>(initialAppSettings);
 
   // Auth & Cloud Sync State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -256,6 +261,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (parsed.shiftConfig) setShiftConfig(parsed.shiftConfig);
         if (parsed.healthProfile) setHealthProfile(parsed.healthProfile);
         if (parsed.healthLogs) setHealthLogs(parsed.healthLogs);
+        if (parsed.appSettings) setAppSettings(parsed.appSettings);
       }
     } catch (e) {
       console.error('Error reading localStorage for LifeOS:', e);
@@ -420,13 +426,13 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => {
     try {
       const dataToSave = {
-        tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
+        tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs, appSettings
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (e) {
       console.error('Error saving to localStorage:', e);
     }
-  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs]);
+  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs, appSettings]);
 
   const signInWithGoogle = async () => {
     setIsSigningIn(true);

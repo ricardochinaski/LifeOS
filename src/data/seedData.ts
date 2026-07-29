@@ -1,4 +1,4 @@
-import { AreaCategory, Project, Task, Habit, HabitLog, FinancialAccount, Transaction, Budget, Book, ReadingLog, BookNote, HealthProfile, HealthLog, Debt, ReadingGroup, ReadingSession } from '../types';
+import { AreaCategory, Project, Task, Habit, HabitLog, FinancialAccount, Transaction, Budget, Book, ReadingLog, BookNote, HealthProfile, HealthLog, Debt, ReadingGroup, ReadingSession, AppCustomSettings } from '../types';
 
 // Helper to get today/yesterday ISO dates
 const getTodayStr = (offsetDays = 0) => {
@@ -314,3 +314,13 @@ export const initialHealthLogs: HealthLog[] = [
     notes: 'Primer registro del día. Estado general óptimo.'
   }
 ];
+
+export const initialAppSettings: AppCustomSettings = {
+  primaryColor: 'emerald',
+  uiDensity: 'comfortable',
+  fontFamily: 'sans',
+  currency: 'CLP',
+  autoSyncCloud: true,
+  soundEffects: true,
+  startOfWeek: 1
+};
