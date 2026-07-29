@@ -167,6 +167,7 @@ interface LifeOSContextType {
 }
 
 const STORAGE_KEY = 'lifeos_local_v1';
+const CURATED_CONTENT_KEY = 'lifeos_curated_content_2026_07_29';
 
 const LifeOSContext = createContext<LifeOSContextType | undefined>(undefined);
 
@@ -193,6 +194,16 @@ const docRef = (uid: string, sub: string, id: string) => doc(db, 'users', uid, s
 // List of collection names to migrate/load
 const COLLECTIONS = ['tasks', 'habits', 'habitLogs', 'accounts', 'budgets', 'debts', 'transactions', 'financialGoals', 'recurringTransactions', 'books', 'readingLogs', 'bookNotes', 'readingGroups', 'readingSessions', 'projects', 'healthLogs'] as const;
 const DEFAULT_SYNC_STATE: SyncState = { tasks: 'idle', habits: 'idle', habitLogs: 'idle', finances: 'idle', library: 'idle', health: 'idle', projects: 'idle', settings: 'idle' };
+
+const curatedTasks = initialTasks.filter((task) => task.id.startsWith('task_home_') || task.id.startsWith('task_personal_') || task.id.startsWith('task_finance_subscription_'));
+const curatedHabits = initialHabits.filter((habit) => habit.id.startsWith('habit_core_'));
+const curatedBooks = initialBooks.filter((book) => book.id.startsWith('book_core_'));
+
+const mergeMissingSeeds = <T extends { id: string }>(current: T[] | undefined, seeds: T[]) => {
+  const base = Array.isArray(current) ? current : [];
+  const existing = new Set(base.map((item) => item.id));
+  return [...base, ...seeds.filter((item) => !existing.has(item.id))];
+};
 
 export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -280,8 +291,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.tasks) setTasks(parsed.tasks);
-        if (parsed.habits) setHabits(parsed.habits);
+        const shouldAddCuratedContent = localStorage.getItem(CURATED_CONTENT_KEY) !== 'done';
+        if (parsed.tasks) setTasks(shouldAddCuratedContent ? mergeMissingSeeds(parsed.tasks, curatedTasks) : parsed.tasks);
+        if (parsed.habits) setHabits(shouldAddCuratedContent ? mergeMissingSeeds(parsed.habits, curatedHabits) : parsed.habits);
         if (parsed.habitLogs) setHabitLogs(parsed.habitLogs);
         if (parsed.accounts) setAccounts(parsed.accounts);
         if (parsed.budgets) setBudgets(parsed.budgets);
@@ -289,7 +301,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (parsed.transactions) setTransactions(parsed.transactions);
         if (parsed.financialGoals) setFinancialGoals(parsed.financialGoals);
         if (parsed.recurringTransactions) setRecurringTransactions(parsed.recurringTransactions);
-        if (parsed.books) setBooks(parsed.books);
+        if (parsed.books) setBooks(shouldAddCuratedContent ? mergeMissingSeeds(parsed.books, curatedBooks) : parsed.books);
         if (parsed.readingLogs) setReadingLogs(parsed.readingLogs);
         if (parsed.bookNotes) setBookNotes(parsed.bookNotes);
         if (parsed.projects) setProjects(parsed.projects);
@@ -299,6 +311,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (parsed.healthProfile) setHealthProfile(parsed.healthProfile);
         if (parsed.healthLogs) setHealthLogs(parsed.healthLogs);
         if (parsed.appSettings) setAppSettings(parsed.appSettings);
+        if (shouldAddCuratedContent) localStorage.setItem(CURATED_CONTENT_KEY, 'done');
+      } else {
+        localStorage.setItem(CURATED_CONTENT_KEY, 'done');
       }
     } catch (e) {
       console.error('Error reading localStorage for LifeOS:', e);
@@ -329,6 +344,34 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (lifeOSData.healthProfile) {
       writes.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), removeUndefinedFields(lifeOSData.healthProfile)));
     }
+    await Promise.all(writes);
+  };
+
+  const ensureCuratedContentInCloud = async (uid: string) => {
+    const markerRef = doc(db, 'users', uid, 'config', CURATED_CONTENT_KEY);
+    const marker = await getDoc(markerRef);
+    if (marker.exists()) return;
+
+    const seedCollections = [
+      { name: 'tasks', seeds: curatedTasks, setter: setTasks },
+      { name: 'habits', seeds: curatedHabits, setter: setHabits },
+      { name: 'books', seeds: curatedBooks, setter: setBooks },
+    ] as const;
+
+    const writes: Promise<void>[] = [];
+    for (const seedCollection of seedCollections) {
+      const snapshot = await getDocs(col(uid, seedCollection.name));
+      const existingIds = new Set(snapshot.docs.map((item) => item.id));
+      const missingSeeds = seedCollection.seeds.filter((item) => !existingIds.has(item.id));
+      if (missingSeeds.length > 0) {
+        seedCollection.setter((current: any[]) => mergeMissingSeeds(current, missingSeeds as any));
+        for (const seed of missingSeeds) {
+          writes.push(setDoc(docRef(uid, seedCollection.name, seed.id), removeUndefinedFields(seed)));
+        }
+      }
+    }
+
+    writes.push(setDoc(markerRef, { version: CURATED_CONTENT_KEY, appliedAt: new Date().toISOString() }, { merge: true }));
     await Promise.all(writes);
   };
 
@@ -445,6 +488,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
           // 2. Load data from Firestore subcollections
           await loadFromSubcollections(user.uid);
+          await ensureCuratedContentInCloud(user.uid);
 
           // 3. Initial upload: ensure all local data is in Firestore
           const localData = localStorage.getItem(STORAGE_KEY);
