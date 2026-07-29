@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
-import { useLifeOS } from '../../context/LifeOSContext';
-import { AppCustomSettings } from '../../types';
+import { useLifeOS } from '../../../context/LifeOSContext';
+import { AppCustomSettings } from '../../../types';
 
 const SETTINGS_KEY = 'lifeos_custom_settings';
 

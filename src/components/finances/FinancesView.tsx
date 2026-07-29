@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
-import { FinancialAccount, Transaction, Budget, Debt, TransactionType } from '../../types';
+import { FinancialAccount, Transaction, Budget, Debt, TransactionType, FinancialGoal, RecurringTransaction } from '../../types';
 import {
   PieChart as PieChartIcon,
   Wallet,
@@ -28,7 +28,7 @@ import {
   ArrowLeftRight,
   AlertTriangle,
   FolderKanban,
-  ListChecks
+  ListChecks, Goal, Repeat2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -73,7 +73,15 @@ export const FinancesView: React.FC = () => {
     deleteDebt,
     payDebt,
     projects,
-    tasks
+    tasks,
+    financialGoals,
+    recurringTransactions,
+    addFinancialGoal,
+    updateFinancialGoal,
+    deleteFinancialGoal,
+    addRecurringTransaction,
+    updateRecurringTransaction,
+    deleteRecurringTransaction,
   } = useLifeOS();
 
   // Filters & Search
@@ -133,6 +141,17 @@ export const FinancesView: React.FC = () => {
   const [debtDueDate, setDebtDueDate] = useState('');
   const [debtStartDate, setDebtStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [debtNotes, setDebtNotes] = useState('');
+  const [isGoalFormOpen, setIsGoalFormOpen] = useState(false);
+  const [goalName, setGoalName] = useState('');
+  const [goalTarget, setGoalTarget] = useState('');
+  const [goalCurrent, setGoalCurrent] = useState('');
+  const [goalDate, setGoalDate] = useState('');
+  const [isRecurringFormOpen, setIsRecurringFormOpen] = useState(false);
+  const [recurringDescription, setRecurringDescription] = useState('');
+  const [recurringAmount, setRecurringAmount] = useState('');
+  const [recurringCategory, setRecurringCategory] = useState('Vivienda & Servicios');
+  const [recurringType, setRecurringType] = useState<TransactionType>('expense');
+  const [recurringFrequency, setRecurringFrequency] = useState<'weekly' | 'monthly'>('monthly');
 
   const todayStr = new Date().toISOString().split('T')[0];
   const currentMonthStr = todayStr.substring(0, 7);
@@ -344,6 +363,22 @@ export const FinancesView: React.FC = () => {
     setIsBudgetModalOpen(false);
   };
 
+  const handleSaveGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = Number(goalTarget);
+    if (!goalName.trim() || target <= 0) return;
+    addFinancialGoal({ name: goalName.trim(), targetAmount: target, currentAmount: Number(goalCurrent) || 0, targetDate: goalDate || undefined, color: '#10B981' });
+    setGoalName(''); setGoalTarget(''); setGoalCurrent(''); setGoalDate(''); setIsGoalFormOpen(false);
+  };
+
+  const handleSaveRecurring = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(recurringAmount);
+    if (!recurringDescription.trim() || amount <= 0 || !accounts[0]) return;
+    addRecurringTransaction({ type: recurringType, amount, category: recurringCategory, description: recurringDescription, accountId: accounts[0].id, frequency: recurringFrequency, nextDate: todayStr, active: true });
+    setRecurringDescription(''); setRecurringAmount(''); setIsRecurringFormOpen(false);
+  };
+
   // Debt Handlers
   const handleOpenNewDebt = () => {
     setEditingDebt(null);
@@ -536,6 +571,19 @@ export const FinancesView: React.FC = () => {
               : 'Diferencia neta'}
           </p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="p-5 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl">
+          <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Goal className="w-5 h-5 text-emerald-400" /><div><h3 className="text-sm font-extrabold text-white">Metas financieras</h3><p className="text-[10px] text-slate-400">Ahorro con progreso visible</p></div></div><button onClick={() => setIsGoalFormOpen(!isGoalFormOpen)} className="text-xs font-bold text-emerald-400">+ Meta</button></div>
+          {isGoalFormOpen && <form onSubmit={handleSaveGoal} className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-2xl bg-slate-800/70 p-3"><input value={goalName} onChange={e => setGoalName(e.target.value)} placeholder="Ej: Fondo de emergencia" className="rounded-xl bg-slate-900 p-2 text-xs text-white" required /><input type="number" value={goalTarget} onChange={e => setGoalTarget(e.target.value)} placeholder="Meta CLP" className="rounded-xl bg-slate-900 p-2 text-xs text-white" required /><input type="number" value={goalCurrent} onChange={e => setGoalCurrent(e.target.value)} placeholder="Ahorrado hoy" className="rounded-xl bg-slate-900 p-2 text-xs text-white" /><input type="date" value={goalDate} onChange={e => setGoalDate(e.target.value)} className="rounded-xl bg-slate-900 p-2 text-xs text-white" /><button className="rounded-xl bg-emerald-500 p-2 text-xs font-black text-slate-950">Guardar meta</button></form>}
+          <div className="mt-4 space-y-3">{financialGoals.map(goal => { const pct = Math.min(100, Math.round(goal.currentAmount / goal.targetAmount * 100)); return <div key={goal.id} className="rounded-2xl bg-slate-800/60 p-3"><div className="flex justify-between gap-3 text-xs"><span className="font-bold text-white">{goal.name}</span><button onClick={() => deleteFinancialGoal(goal.id)} className="text-slate-500 hover:text-rose-400">Eliminar</button></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-950"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div><div className="mt-1 flex justify-between text-[10px] text-slate-400"><span>{formatCLP(goal.currentAmount)} de {formatCLP(goal.targetAmount)}</span><span>{goal.targetDate || `${pct}%`}</span></div></div> })}{financialGoals.length === 0 && <p className="py-5 text-center text-xs text-slate-500">Crea tu primera meta para darle destino a tu ahorro.</p>}</div>
+        </section>
+        <section className="p-5 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl">
+          <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Repeat2 className="w-5 h-5 text-sky-400" /><div><h3 className="text-sm font-extrabold text-white">Flujo recurrente</h3><p className="text-[10px] text-slate-400">Base para proyectar tu mes</p></div></div><button onClick={() => setIsRecurringFormOpen(!isRecurringFormOpen)} className="text-xs font-bold text-sky-400">+ Recurrente</button></div>
+          {isRecurringFormOpen && <form onSubmit={handleSaveRecurring} className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-2xl bg-slate-800/70 p-3"><input value={recurringDescription} onChange={e => setRecurringDescription(e.target.value)} placeholder="Ej: Arriendo" className="rounded-xl bg-slate-900 p-2 text-xs text-white" required /><input type="number" value={recurringAmount} onChange={e => setRecurringAmount(e.target.value)} placeholder="Monto CLP" className="rounded-xl bg-slate-900 p-2 text-xs text-white" required /><select value={recurringType} onChange={e => setRecurringType(e.target.value as TransactionType)} className="rounded-xl bg-slate-900 p-2 text-xs text-white"><option value="expense">Gasto</option><option value="income">Ingreso</option></select><select value={recurringFrequency} onChange={e => setRecurringFrequency(e.target.value as 'weekly' | 'monthly')} className="rounded-xl bg-slate-900 p-2 text-xs text-white"><option value="monthly">Mensual</option><option value="weekly">Semanal</option></select><button className="rounded-xl bg-sky-500 p-2 text-xs font-black text-slate-950">Guardar movimiento</button></form>}
+          <div className="mt-4 space-y-2">{recurringTransactions.map(item => <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-800/60 p-3 text-xs"><div><p className="font-bold text-white">{item.description}</p><p className="text-[10px] text-slate-400">{item.frequency === 'monthly' ? 'Mensual' : 'Semanal'} · Próximo: {item.nextDate}</p></div><div className="flex items-center gap-2"><span className={item.type === 'income' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400'}>{item.type === 'income' ? '+' : '-'}{formatCLP(item.amount)}</span><button onClick={() => updateRecurringTransaction({ ...item, active: !item.active })} className="text-[10px] text-slate-400">{item.active ? 'Pausar' : 'Activar'}</button><button onClick={() => deleteRecurringTransaction(item.id)} className="text-slate-500 hover:text-rose-400">×</button></div></div>)}{recurringTransactions.length === 0 && <p className="py-5 text-center text-xs text-slate-500">Agrega arriendo, sueldo o suscripciones para anticipar tu flujo.</p>}</div>
+        </section>
       </div>
 
       {/* Accounts List Section */}

@@ -88,6 +88,8 @@ export interface Task {
   notifyAt?: string; // HH:mm format for notification reminder
   recurrence?: RecurrenceRule;
   completedCount?: number;
+  tags?: string[];
+  estimatedMinutes?: number;
 }
 
 export type HabitFrequency = 'daily' | 'weekly' | 'target_times';
@@ -111,6 +113,9 @@ export interface Habit {
   shiftContext?: 'all' | 'rest' | 'work';
   notifyAt?: string; // HH:mm format for daily notification reminder
   timeOfDay?: 'morning' | 'afternoon' | 'evening';
+  activeDays?: number[]; // 0=Sunday, 1=Monday... Empty means every day.
+  streakFreezes?: number;
+  isNegative?: boolean;
 }
 
 export interface HabitLog {
@@ -157,7 +162,34 @@ export interface Budget {
   monthlyLimit: number;
   areaId?: string;
   period: string; // YYYY-MM
+  rollover?: boolean;
 }
+
+export interface FinancialGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate?: string;
+  color: string;
+  linkedAccountId?: string;
+  createdAt: string;
+}
+
+export interface RecurringTransaction {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  category: string;
+  description: string;
+  accountId: string;
+  frequency: 'weekly' | 'monthly';
+  nextDate: string;
+  active: boolean;
+}
+
+export type SyncCollection = 'tasks' | 'habits' | 'habitLogs' | 'finances' | 'library' | 'health' | 'projects' | 'settings';
+export type SyncState = Record<SyncCollection, 'idle' | 'syncing' | 'synced' | 'error'>;
 
 export type DebtType = 'loan' | 'credit_card' | 'retail' | 'personal' | 'mortgage' | 'other';
 
@@ -339,19 +371,6 @@ export interface ReadingGroup {
   nextMeetingDate?: string;
 }
 
-export interface ReadingSession {
-  id: string;
-  bookId: string;
-  groupId?: string;
-  userId: string;
-  date: string;
-  startTime: string;
-  endTime?: string;
-  pagesRead: number;
-  duration: number; // in minutes
-  notes?: string;
-  createdAt: string;
-}
 
 export interface ReadingSession {
   id: string;

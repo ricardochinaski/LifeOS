@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLifeOS } from '../../../context/LifeOSContext';
 import { APP_CONSTANTS, NotificationTypeId } from '../constants';
-import { Bell, Calendar, Check, CheckCircle2, Volume2, VolumeX, Clock } from 'lucide-react';
+import { Bell, Calendar, Check, CheckCircle2, Volume2, VolumeX, Clock, Briefcase, Flame, Droplets, BookOpen, Receipt, HeartPulse } from 'lucide-react';
+import { initNotificationChannels, requestNotificationPermission } from '../../../utils/notifications';
 
 export const NotificationsSection: React.FC = () => {
   const { openNotificationsModal, shiftConfig, healthProfile } = useLifeOS();
@@ -21,6 +22,7 @@ export const NotificationsSection: React.FC = () => {
     budget: '12:00',
     health: '07:00',
   });
+  const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'blocked'>('unknown');
 
   useEffect(() => {
     const saved = localStorage.getItem('lifeos_notification_settings');
@@ -100,6 +102,12 @@ export const NotificationsSection: React.FC = () => {
 
   const nextNotification = getNextNotificationTime();
 
+  const enableNativeNotifications = async () => {
+    const granted = await requestNotificationPermission();
+    if (granted) await initNotificationChannels();
+    setPermissionStatus(granted ? 'granted' : 'blocked');
+  };
+
   return (
     <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-6 animate-fade-in">
       <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
@@ -125,6 +133,11 @@ export const NotificationsSection: React.FC = () => {
         </span>
         <span className="text-amber-400">⚙️</span>
       </button>
+
+      <div className={`flex items-center justify-between gap-3 rounded-2xl border p-3 ${permissionStatus === 'granted' ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'}`}>
+        <div><p className="text-xs font-bold text-slate-800 dark:text-white">Permisos de Android</p><p className="text-[10px] text-slate-500">{permissionStatus === 'granted' ? 'Permiso concedido y canales configurados.' : permissionStatus === 'blocked' ? 'Permiso bloqueado. Actívalo en Ajustes del teléfono.' : 'Verifica que el sistema pueda mostrar las alertas.'}</p></div>
+        <button onClick={enableNativeNotifications} className="rounded-xl bg-emerald-500 px-3 py-2 text-[10px] font-black text-slate-950">{permissionStatus === 'granted' ? 'Verificado' : 'Activar'}</button>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {APP_CONSTANTS.NOTIFICATION_TYPES.map((notif) => {

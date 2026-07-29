@@ -49,6 +49,9 @@ export const TasksView: React.FC = () => {
   const [newTaskRecurrenceType, setNewTaskRecurrenceType] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
   const [newTaskRecurrenceInterval, setNewTaskRecurrenceInterval] = useState(1);
   const [newTaskRecurrenceEnds, setNewTaskRecurrenceEnds] = useState<number>(0);
+  const [newTaskTags, setNewTaskTags] = useState('');
+  const [newTaskEstimatedMinutes, setNewTaskEstimatedMinutes] = useState('');
+  const [savedFilter, setSavedFilter] = useState<'all' | 'today' | 'overdue' | 'focus'>('all');
 
   const [isAddingProject, setIsAddingProject] = useState(false);
   const [newProjName, setNewProjName] = useState('');
@@ -160,6 +163,10 @@ export const TasksView: React.FC = () => {
     if (selectedPriorityFilter !== 'all') result = result.filter((t) => t.priority === selectedPriorityFilter);
     if (selectedProjectFilter !== 'all') result = result.filter((t) => t.projectId === selectedProjectFilter);
     if (selectedShiftFilter !== 'all') result = result.filter((t) => (t.shiftContext || 'all') === selectedShiftFilter || t.shiftContext === undefined || t.shiftContext === 'all');
+    const today = new Date().toISOString().split('T')[0];
+    if (savedFilter === 'today') result = result.filter(t => t.status !== 'completed' && t.dueDate === today);
+    if (savedFilter === 'overdue') result = result.filter(t => t.status !== 'completed' && !!t.dueDate && t.dueDate < today);
+    if (savedFilter === 'focus') result = result.filter(t => t.status !== 'completed' && (t.priority === 'p1' || t.priority === 'p2'));
     result.sort((a, b) => {
       let cmp = 0;
       if (sortBy === 'priority') cmp = priorityOrder[a.priority] - priorityOrder[b.priority];
@@ -169,7 +176,7 @@ export const TasksView: React.FC = () => {
       return sortAsc ? cmp : -cmp;
     });
     return result;
-  }, [tasks, searchQuery, selectedAreaFilter, selectedPriorityFilter, selectedProjectFilter, selectedShiftFilter, sortBy, sortAsc]);
+  }, [tasks, searchQuery, selectedAreaFilter, selectedPriorityFilter, selectedProjectFilter, selectedShiftFilter, savedFilter, sortBy, sortAsc]);
 
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -209,6 +216,8 @@ export const TasksView: React.FC = () => {
       linkedHabitId: newTaskLinkedHabit || undefined,
       linkedBookId: newTaskLinkedBook || undefined,
       recurrence,
+      tags: newTaskTags.split(',').map(tag => tag.trim()).filter(Boolean),
+      estimatedMinutes: Number(newTaskEstimatedMinutes) || undefined,
     });
     setNewTaskTitle('');
     setNewTaskDesc('');
@@ -218,6 +227,8 @@ export const TasksView: React.FC = () => {
     setNewTaskRecurrenceType('none');
     setNewTaskRecurrenceInterval(1);
     setNewTaskRecurrenceEnds(0);
+    setNewTaskTags('');
+    setNewTaskEstimatedMinutes('');
     setIsAddingTask(false);
   };
 
@@ -303,6 +314,8 @@ export const TasksView: React.FC = () => {
               {linkedBook && <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center gap-1"><BookOpen className="w-2.5 h-2.5" />{linkedBook.title}</span>}
               {t.linkedTransactionId && <span className="px-1.5 py-0.5 rounded text-[9px] bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 flex items-center gap-1"><DollarSign className="w-2.5 h-2.5" />Transacción</span>}
               {t.completedCount && t.completedCount > 0 ? <span className="text-[9px] text-slate-400 font-mono">#{t.completedCount}</span> : null}
+              {t.estimatedMinutes ? <span className="text-[9px] text-slate-400 font-mono">{t.estimatedMinutes} min</span> : null}
+              {t.tags?.map(tag => <span key={tag} className="px-1.5 py-0.5 rounded text-[9px] bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300">#{tag}</span>)}
             </div>
             {t.subtasks.length > 0 && (
               <div className="pt-2">
@@ -430,6 +443,12 @@ export const TasksView: React.FC = () => {
       </div>
 
       {viewMode !== 'calendar' && (
+        <div className="flex flex-wrap gap-2">
+          {([['all', 'Todo'], ['today', 'Hoy'], ['overdue', 'Atrasadas'], ['focus', 'Foco P1/P2']] as const).map(([id, label]) => <button key={id} onClick={() => setSavedFilter(id)} className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${savedFilter === id ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{label}</button>)}
+        </div>
+      )}
+
+      {viewMode !== 'calendar' && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
             <p className="text-lg font-bold text-slate-900 dark:text-white">{stats.total}</p>
@@ -520,6 +539,10 @@ export const TasksView: React.FC = () => {
             </select>
           </div>
           <textarea placeholder="Descripción u observaciones opcionales" rows={2} value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input value={newTaskTags} onChange={e => setNewTaskTags(e.target.value)} placeholder="Etiquetas: faena, llamada, casa" className="p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white" />
+            <input type="number" min="1" value={newTaskEstimatedMinutes} onChange={e => setNewTaskEstimatedMinutes(e.target.value)} placeholder="Duración estimada (minutos)" className="p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white" />
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Prioridad:</label>

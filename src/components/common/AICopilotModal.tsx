@@ -103,8 +103,8 @@ Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}*
   const latestBiometrics = healthLogs.length > 0 ? healthLogs[0] : null;
   const pendingTasksCount = tasks.filter(t => t.status !== 'completed').length;
 
-  const handleExecuteAction = (text: string): string | null => {
-    const result = parseVoiceCommand({ text });
+  const handleExecuteAction = async (text: string): Promise<string | null> => {
+    const result = await parseVoiceCommand({ text });
     if (!result || !result.intent || result.intent === 'unknown') return null;
 
     const { intent, data } = result;
@@ -153,7 +153,7 @@ Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}*
 
     try {
       // Try to execute action from user message
-      const actionResult = handleExecuteAction(text);
+      const actionResult = await handleExecuteAction(text);
       if (actionResult) {
         const assistantMsg: Message = {
           id: (Date.now() + 1).toString(),
@@ -366,7 +366,7 @@ Conozco tu rotación de turno **${shiftConfig.workDays}x${shiftConfig.restDays}*
               type="button"
               onClick={() => {
                 onClose();
-                setIsVoiceModalOpen(true);
+                openVoiceModal();
               }}
               className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors cursor-pointer"
               title="Dictar por Voz"

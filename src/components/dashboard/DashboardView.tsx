@@ -5,7 +5,7 @@ import { TimerCard } from './TimerCard';
 import {
   Flame, CheckSquare, Wallet, BookOpen, Sparkles, Plus,
   CheckCircle2, Circle, ChevronRight,
-  Dumbbell, HeartPulse, Bookmark, Settings2, Moon, Activity, Eye, EyeOff
+  Dumbbell, HeartPulse, Bookmark, Settings2, Moon, Activity, Eye, EyeOff, CalendarDays, Cloud, AlertTriangle
 } from 'lucide-react';
 
 interface WidgetConfig {
@@ -42,6 +42,9 @@ export const DashboardView: React.FC = () => {
     updateBookProgress,
     healthProfile,
     healthLogs,
+    shiftInfo,
+    syncState,
+    lastSyncedAt,
     setActiveTab,
     openQuickCapture
   } = useLifeOS();
@@ -75,6 +78,10 @@ export const DashboardView: React.FC = () => {
 
   // 2. Priority Tasks (P1 / P2)
   const priorityTasks = tasks.filter((t) => (t.priority === 'p1' || t.priority === 'p2') && t.status !== 'completed');
+  const overdueTasks = tasks.filter(t => t.status !== 'completed' && t.dueDate && t.dueDate < todayStr);
+  const todayTasks = tasks.filter(t => t.status !== 'completed' && t.dueDate === todayStr && (t.shiftContext === 'all' || !t.shiftContext || t.shiftContext === shiftInfo.phase));
+  const nextTasks = tasks.filter(t => t.status !== 'completed' && t.dueDate && t.dueDate > todayStr).sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).slice(0, 3);
+  const syncProblem = Object.values(syncState).some(state => state === 'error');
 
   // 3. Financial Progress
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
@@ -143,6 +150,42 @@ export const DashboardView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Daily command center: one short, actionable plan rather than a wall of widgets. */}
+      <section className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4">
+        <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Centro diario</p>
+              <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">Lo que mueve tu día</h2>
+            </div>
+            <button onClick={() => setActiveTab('tasks')} className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Ver plan</button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className={`rounded-2xl p-3 ${overdueTasks.length ? 'bg-rose-50 dark:bg-rose-950/30' : 'bg-slate-50 dark:bg-slate-800/60'}`}>
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500"><AlertTriangle className="w-3.5 h-3.5" /> Atrasadas</div>
+              <p className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{overdueTasks.length}</p>
+              <p className="text-[11px] text-slate-500">Resuélvelas primero</p>
+            </div>
+            <div className="rounded-2xl bg-amber-50 p-3 dark:bg-amber-950/30">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-amber-700 dark:text-amber-300"><CalendarDays className="w-3.5 h-3.5" /> Hoy</div>
+              <p className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{todayTasks.length}</p>
+              <p className="text-[11px] text-slate-500">{shiftInfo.phase === 'work' ? 'Plan de faena' : 'Plan de descanso'}</p>
+            </div>
+            <div className="rounded-2xl bg-sky-50 p-3 dark:bg-sky-950/30">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-sky-700 dark:text-sky-300"><ChevronRight className="w-3.5 h-3.5" /> Próximo</div>
+              <p className="mt-2 truncate text-sm font-black text-slate-900 dark:text-white">{nextTasks[0]?.title || 'Sin pendientes'}</p>
+              <p className="mt-2 text-[11px] text-slate-500">{nextTasks[0]?.dueDate || 'Agenda libre'}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center gap-2"><Cloud className={`w-4 h-4 ${syncProblem ? 'text-rose-400' : 'text-emerald-400'}`} /><p className="text-xs font-extrabold">Sincronización</p></div>
+          <p className={`mt-3 text-sm font-bold ${syncProblem ? 'text-rose-300' : 'text-emerald-300'}`}>{syncProblem ? 'Hay cambios que requieren atención' : 'Tus módulos están al día'}</p>
+          <p className="mt-1 text-[11px] text-slate-400">{lastSyncedAt ? `Última actualización: ${new Date(lastSyncedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}` : 'Conecta Google para respaldar tus datos.'}</p>
+          <div className="mt-4 flex flex-wrap gap-1.5">{Object.entries(syncState).filter(([, state]) => state !== 'idle').map(([key, state]) => <span key={key} className={`rounded-full px-2 py-1 text-[9px] font-bold ${state === 'error' ? 'bg-rose-500/20 text-rose-200' : 'bg-emerald-500/15 text-emerald-200'}`}>{key}</span>)}</div>
+        </div>
+      </section>
 
       {/* 14x14 Mining Shift Card Widget */}
       {widgetConfig.shiftCard && <ShiftDashboardCard />}
@@ -558,4 +601,3 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-

@@ -25,6 +25,7 @@ export const HabitsView: React.FC = () => {
   const [shiftContext, setShiftContext] = useState<'all' | 'rest' | 'work'>('all');
   const [habitNotifyAt, setHabitNotifyAt] = useState('');
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay | ''>('');
+  const [activeDays, setActiveDays] = useState<number[]>([]);
   const [activeFilter, setActiveFilter] = useState<'all' | 'rest' | 'work'>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [weekOffset, setWeekOffset] = useState(0);
@@ -46,7 +47,7 @@ export const HabitsView: React.FC = () => {
   const openNewHabit = () => {
     setEditingHabit(null);
     setTitle(''); setDesc(''); setAreaId('area_health'); setTargetValue('1');
-    setUnit('veces'); setShiftContext('all'); setHabitNotifyAt(''); setTimeOfDay('');
+    setUnit('veces'); setShiftContext('all'); setHabitNotifyAt(''); setTimeOfDay(''); setActiveDays([]);
     setIsAddingHabit(true);
   };
 
@@ -56,6 +57,7 @@ export const HabitsView: React.FC = () => {
     setTargetValue(h.targetValue.toString()); setUnit(h.unit);
     setShiftContext(h.shiftContext || 'all'); setHabitNotifyAt(h.notifyAt || '');
     setTimeOfDay(h.timeOfDay || '');
+    setActiveDays(h.activeDays || []);
     setIsAddingHabit(true);
   };
 
@@ -64,7 +66,7 @@ export const HabitsView: React.FC = () => {
     if (!title.trim()) return;
     const data = { title, description: desc, areaId, color: '#10B981', icon: 'Sparkles',
       frequency: 'daily' as const, targetValue: parseFloat(targetValue) || 1, unit,
-      shiftContext, notifyAt: habitNotifyAt || undefined, timeOfDay: timeOfDay || undefined };
+      shiftContext, notifyAt: habitNotifyAt || undefined, timeOfDay: timeOfDay || undefined, activeDays };
     if (editingHabit) {
       updateHabit({ ...editingHabit, ...data });
     } else {
@@ -253,6 +255,12 @@ export const HabitsView: React.FC = () => {
               className="p-2 text-xs rounded-xl border border-slate-700 bg-slate-800 text-white"
               title="Alarma diaria (opcional)" />
             <span className="text-[10px] text-slate-400">Alarma diaria (opcional)</span>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase text-slate-400">Días activos <span className="normal-case font-medium">(vacío = todos)</span></p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {['D', 'L', 'M', 'X', 'J', 'V', 'S'].map((label, day) => <button type="button" key={label} onClick={() => setActiveDays(current => current.includes(day) ? current.filter(value => value !== day) : [...current, day])} className={`h-8 w-8 rounded-full text-[11px] font-black ${activeDays.includes(day) ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{label}</button>)}
+            </div>
           </div>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => { setIsAddingHabit(false); setEditingHabit(null); }}

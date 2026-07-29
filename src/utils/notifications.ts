@@ -70,7 +70,7 @@ export async function initNotificationChannels() {
   ];
 
   try {
-    await LocalNotifications.createChannels({ channels });
+    await Promise.all(channels.map(channel => LocalNotifications.createChannel(channel)));
   } catch (e) {
     console.error('Error creating channels:', e);
   }

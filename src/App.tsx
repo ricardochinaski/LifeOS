@@ -6,6 +6,7 @@ import { QuickCaptureModal } from './components/common/QuickCaptureModal';
 import { ShiftCalibrationModal } from './components/common/ShiftCalibrationModal';
 import { AICopilotModal } from './components/common/AICopilotModal';
 import { VoiceCommandModal } from './components/common/VoiceCommandModal';
+import { CommandPalette } from './components/common/CommandPalette';
 import { GoogleCalendarSyncModal } from './components/integrations/GoogleCalendarSyncModal';
 import { PushNotificationsModal } from './components/integrations/PushNotificationsModal';
 import { Bot } from 'lucide-react';
@@ -67,6 +68,7 @@ const AppContent: React.FC = () => {
       <ShiftCalibrationModal />
       <AICopilotModal isOpen={isAICopilotOpen} onClose={closeAICopilot} />
       <VoiceCommandModal isOpen={isVoiceModalOpen} onClose={closeVoiceModal} />
+      <CommandPalette />
       <GoogleCalendarSyncModal isOpen={isCalendarModalOpen} onClose={closeCalendarModal} />
       <PushNotificationsModal isOpen={isNotificationsModalOpen} onClose={closeNotificationsModal} />
 

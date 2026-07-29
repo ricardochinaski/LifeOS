@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
-import { AppCustomSettings } from '../../types';
 import { getGeminiApiKey, setGeminiApiKey } from '../../lib/gemini';
 import {
   Settings,
@@ -51,8 +50,13 @@ export const SettingsView: React.FC = () => {
     logout,
     syncToCloud,
     isSyncing,
+    syncState,
+    lastSyncedAt,
     exportDataJSON,
+    importDataJSON,
     resetToDefaults,
+    appSettings,
+    updateAppSettings,
     showToast,
     accounts,
     budgets,
@@ -61,38 +65,20 @@ export const SettingsView: React.FC = () => {
 
   const [activeSection, setActiveSection] = useState<'theme' | 'shift' | 'finance' | 'health' | 'notifications' | 'ai' | 'data'>('theme');
 
-  // Custom Local Settings
-  const [appSettings, setAppSettings] = useState<AppCustomSettings>(() => {
-    try {
-      const saved = localStorage.getItem('lifeos_custom_settings');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return {
-      primaryColor: 'emerald',
-      uiDensity: 'comfortable',
-      fontFamily: 'sans',
-      currency: 'CLP',
-      autoSyncCloud: true,
-      soundEffects: true,
-      startOfWeek: 1
-    };
-  });
+  const [pendingBackup, setPendingBackup] = useState<Record<string, unknown> | null>(null);
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const saveCustomSettings = (updated: Partial<AppCustomSettings>) => {
-    const newSettings = { ...appSettings, ...updated };
-    setAppSettings(newSettings);
-    try {
-      localStorage.setItem('lifeos_custom_settings', JSON.stringify(newSettings));
-    } catch (e) {}
+  const saveCustomSettings = (updated: Partial<typeof appSettings>) => {
+    updateAppSettings(updated);
     if (updated.primaryColor) {
       document.documentElement.setAttribute('data-accent', updated.primaryColor);
     }
     if (updated.uiDensity) {
       document.documentElement.setAttribute('data-density', updated.uiDensity);
     }
-    showToast('Preferencias de personalización guardadas');
+    showToast('Preferencias guardadas y sincronizadas.');
   };
 
   const handleImportJSON = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,12 +91,8 @@ export const SettingsView: React.FC = () => {
         const content = e.target?.result as string;
         const parsed = JSON.parse(content);
 
-        if (parsed.tasks || parsed.habits || parsed.accounts) {
-          localStorage.setItem('lifeos_local_v1', JSON.stringify(parsed));
-          showToast('¡Respaldo importado correctamente! Recargando aplicación...');
-          setTimeout(() => {
-            window.location.reload();
-          }, 1200);
+        if (parsed.version || parsed.tasks || parsed.habits || parsed.accounts) {
+          setPendingBackup(parsed);
         } else {
           showToast('El archivo JSON no contiene un formato de respaldo LifeOS válido.');
         }
@@ -171,6 +153,12 @@ export const SettingsView: React.FC = () => {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <Cloud className={`h-4 w-4 ${Object.values(syncState).some(state => state === 'error') ? 'text-rose-500' : 'text-emerald-500'}`} />
+        <span className="font-bold text-slate-700 dark:text-slate-200">{Object.values(syncState).some(state => state === 'error') ? 'Hay módulos pendientes de sincronizar' : currentUser ? 'Cuenta y ajustes sincronizados' : 'Respaldo solo en este dispositivo'}</span>
+        {lastSyncedAt && <span className="text-slate-400">Última actualización: {new Date(lastSyncedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</span>}
       </div>
 
       {/* Main Grid: Sidebar Menu + Content */}
@@ -427,6 +415,14 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
 
+              {pendingBackup && (
+                <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 p-4 space-y-3">
+                  <div><p className="text-sm font-black text-amber-700 dark:text-amber-300">Revisar restauración</p><p className="text-xs text-slate-600 dark:text-slate-300">Backup {String(pendingBackup.version || 'legacy')} · {Array.isArray(pendingBackup.tasks) ? `${pendingBackup.tasks.length} tareas` : 'sin tareas detectadas'}. La clave de Gemini no se importa.</p></div>
+                  <div className="flex flex-wrap gap-2"><button onClick={() => setImportMode('merge')} className={`rounded-xl px-3 py-2 text-xs font-bold ${importMode === 'merge' ? 'bg-amber-500 text-slate-950' : 'bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>Fusionar por ID</button><button onClick={() => setImportMode('replace')} className={`rounded-xl px-3 py-2 text-xs font-bold ${importMode === 'replace' ? 'bg-rose-500 text-white' : 'bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>Reemplazar este dispositivo</button></div>
+                  <div className="flex gap-2"><button onClick={() => { importDataJSON(pendingBackup, importMode); setPendingBackup(null); }} className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950">Confirmar restauración</button><button onClick={() => setPendingBackup(null)} className="rounded-xl px-3 py-2 text-xs font-bold text-slate-500">Cancelar</button></div>
+                </div>
+              )}
+
               <div className="space-y-3">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Ubicación o Campamento Minero
@@ -626,15 +622,15 @@ export const SettingsView: React.FC = () => {
               {/* Reset to clean defaults */}
               <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-slate-900 dark:text-white">Restauración de Fábrica</p>
-                  <p className="text-[11px] text-slate-400">Reinicia los datos a la configuración inicial limpia.</p>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">Restablecer este dispositivo</p>
+                  <p className="text-[11px] text-slate-400">Restaura los valores locales; no elimina la información de Google Cloud.</p>
                 </div>
                 <button
                   onClick={() => resetToDefaults()}
                   className="px-4 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <RotateCcw className="w-4 h-4" />
-                  <span>Reiniciar Datos</span>
+                  <span>Restablecer local</span>
                 </button>
               </div>
             </div>
@@ -717,6 +713,12 @@ const AISection: React.FC = () => {
           <p><Sparkles className="w-3 h-3 inline mr-1 text-amber-400" /> Comandos de Voz - Dictado inteligente</p>
           <p><HeartPulse className="w-3 h-3 inline mr-1 text-rose-400" /> Planificador de Rutinas - Ejercicios personalizados</p>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-slate-600 dark:text-slate-300 space-y-3">
+        <p className="font-bold text-amber-700 dark:text-amber-300">Privacidad de IA</p>
+        <p>La clave permanece solo en este dispositivo y nunca se incluye en backups ni en Firestore. Las consultas que envíes al Copilot se procesan con Gemini.</p>
+        <div className="flex flex-wrap gap-2"><button onClick={() => { setGeminiApiKey(''); setApiKey(''); showToast('API Key eliminada de este dispositivo.'); }} className="rounded-xl border border-rose-500/30 px-3 py-2 text-[10px] font-bold text-rose-600 dark:text-rose-300">Eliminar API Key</button><button onClick={() => { localStorage.removeItem('lifeos_chat_messages'); showToast('Historial del Copilot eliminado.'); }} className="rounded-xl border border-slate-300 px-3 py-2 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:text-slate-300">Borrar historial Copilot</button></div>
       </div>
     </div>
   );
