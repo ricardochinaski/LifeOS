@@ -134,6 +134,7 @@ interface LifeOSContextType {
 }
 
 const STORAGE_KEY = 'lifeos_local_v1';
+const LAST_UPDATED_KEY = 'lifeos_last_updated';
 
 const LifeOSContext = createContext<LifeOSContextType | undefined>(undefined);
 
@@ -230,41 +231,67 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           const docSnap = await getDoc(userDocRef);
           if (docSnap.exists() && docSnap.data().lifeOSData) {
             const remoteData = docSnap.data().lifeOSData;
-            if (remoteData.tasks) setTasks(remoteData.tasks);
-            if (remoteData.habits) setHabits(remoteData.habits);
-            if (remoteData.habitLogs) setHabitLogs(remoteData.habitLogs);
-            if (remoteData.accounts) setAccounts(remoteData.accounts);
-            if (remoteData.budgets) setBudgets(remoteData.budgets);
-            if (remoteData.debts) setDebts(remoteData.debts);
-            if (remoteData.transactions) setTransactions(remoteData.transactions);
-            if (remoteData.books) setBooks(remoteData.books);
-            if (remoteData.readingLogs) setReadingLogs(remoteData.readingLogs);
-            if (remoteData.bookNotes) setBookNotes(remoteData.bookNotes);
-            if (remoteData.projects) setProjects(remoteData.projects);
-            if (remoteData.shiftConfig) setShiftConfig(remoteData.shiftConfig);
-            if (remoteData.healthProfile) setHealthProfile(remoteData.healthProfile);
-            if (remoteData.healthLogs) setHealthLogs(remoteData.healthLogs);
-            showToast(`Bienvenido ${user.displayName || user.email}. Datos sincronizados desde la nube.`);
+            const remoteUpdatedAt: string | undefined = docSnap.data().updatedAt;
+            const localUpdatedAt = localStorage.getItem(LAST_UPDATED_KEY);
+
+            const remoteNewer = remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt);
+
+            if (remoteNewer) {
+              if (remoteData.tasks) setTasks(remoteData.tasks);
+              if (remoteData.habits) setHabits(remoteData.habits);
+              if (remoteData.habitLogs) setHabitLogs(remoteData.habitLogs);
+              if (remoteData.accounts) setAccounts(remoteData.accounts);
+              if (remoteData.budgets) setBudgets(remoteData.budgets);
+              if (remoteData.debts) setDebts(remoteData.debts);
+              if (remoteData.transactions) setTransactions(remoteData.transactions);
+              if (remoteData.books) setBooks(remoteData.books);
+              if (remoteData.readingLogs) setReadingLogs(remoteData.readingLogs);
+              if (remoteData.bookNotes) setBookNotes(remoteData.bookNotes);
+              if (remoteData.projects) setProjects(remoteData.projects);
+              if (remoteData.shiftConfig) setShiftConfig(remoteData.shiftConfig);
+              if (remoteData.healthProfile) setHealthProfile(remoteData.healthProfile);
+              if (remoteData.healthLogs) setHealthLogs(remoteData.healthLogs);
+              localStorage.setItem(LAST_UPDATED_KEY, remoteUpdatedAt);
+              showToast(`Bienvenido ${user.displayName || user.email}. Datos sincronizados desde la nube.`);
+            } else {
+              const lifeOSData = {
+                tasks, habits, habitLogs, accounts, budgets, debts, transactions,
+                books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
+              };
+              const lastUpdated = localUpdatedAt || new Date().toISOString();
+              await setDoc(userDocRef, {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+                updatedAt: lastUpdated,
+                lifeOSData
+              }, { merge: true });
+              localStorage.setItem(LAST_UPDATED_KEY, lastUpdated);
+              showToast('Datos locales subidos a la nube (mas recientes).');
+            }
           } else {
             const lifeOSData = {
               tasks, habits, habitLogs, accounts, budgets, debts, transactions,
               books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
             };
+            const lastUpdated = new Date().toISOString();
             await setDoc(userDocRef, {
               uid: user.uid,
               email: user.email,
               displayName: user.displayName,
               photoURL: user.photoURL,
-              updatedAt: new Date().toISOString(),
+              updatedAt: lastUpdated,
               lifeOSData
             });
+            localStorage.setItem(LAST_UPDATED_KEY, lastUpdated);
             showToast('Cuenta de Google vinculada. Sincronizacion inicial completada.');
           }
         } catch (error) {
           console.error('Error loading Firestore document:', error);
         } finally {
           setIsSyncing(false);
-          setTimeout(() => { skipAutoSync.current = false; }, 2000);
+          skipAutoSync.current = false;
         }
       }
     });
@@ -274,9 +301,11 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Sync to LocalStorage & Auto-sync to Cloud Firestore if logged in
   useEffect(() => {
     try {
+      const lastUpdated = new Date().toISOString();
       const dataToSave = {
         tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
       };
+      localStorage.setItem(LAST_UPDATED_KEY, lastUpdated);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
 
       if (currentUser && !skipAutoSync.current) {
@@ -289,7 +318,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               email: currentUser.email,
               displayName: currentUser.displayName,
               photoURL: currentUser.photoURL,
-              updatedAt: new Date().toISOString(),
+              updatedAt: lastUpdated,
               lifeOSData: dataToSave
             }, { merge: true });
           } catch (e) {
@@ -343,6 +372,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (!currentUser) return;
     setIsSyncing(true);
     try {
+      const lastUpdated = new Date().toISOString();
       const userDocRef = doc(db, 'users', currentUser.uid);
       const lifeOSData = {
         tasks, habits, habitLogs, accounts, budgets, debts, transactions,
@@ -353,9 +383,10 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         email: currentUser.email,
         displayName: currentUser.displayName,
         photoURL: currentUser.photoURL,
-        updatedAt: new Date().toISOString(),
+        updatedAt: lastUpdated,
         lifeOSData
       }, { merge: true });
+      localStorage.setItem(LAST_UPDATED_KEY, lastUpdated);
       showToast('Sincronizado con Google Cloud Firestore ✓');
     } catch (error) {
       console.error('Error manual syncing to cloud:', error);
@@ -961,6 +992,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setHealthLogs(initialHealthLogs);
       setShiftConfig(DEFAULT_SHIFT_CONFIG);
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LAST_UPDATED_KEY);
       localStorage.clear();
       showToast('LifeOS reiniciado con parámetros limpios para comenzar hoy.');
     }
