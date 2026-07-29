@@ -16,7 +16,7 @@ import { DEFAULT_SHIFT_CONFIG, calculateShiftInfo, getAnchorDateForDay } from '.
 import { updateWidgetData } from '../lib/widgetBridge';
 import {
   auth, db, signInWithPopup, signInWithCredential, GoogleAuthProvider, signOut, onAuthStateChanged,
-  doc, setDoc, getDoc, User
+  doc, setDoc, getDoc, getDocs, onSnapshot, collection, query, orderBy, updateDoc, deleteDoc, deleteField, User
 } from '../lib/firebase';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { isNative } from '../lib/native';
@@ -134,9 +134,15 @@ interface LifeOSContextType {
 }
 
 const STORAGE_KEY = 'lifeos_local_v1';
-const LAST_UPDATED_KEY = 'lifeos_last_updated';
 
 const LifeOSContext = createContext<LifeOSContextType | undefined>(undefined);
+
+// Firestore subcollection helpers
+const col = (uid: string, sub: string) => collection(db, 'users', uid, sub);
+const docRef = (uid: string, sub: string, id: string) => doc(db, 'users', uid, sub, id);
+
+// List of collection names to migrate/load
+const COLLECTIONS = ['tasks', 'habits', 'habitLogs', 'accounts', 'budgets', 'debts', 'transactions', 'books', 'readingLogs', 'bookNotes', 'projects', 'healthLogs'] as const;
 
 export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -154,7 +160,6 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState<boolean>(false);
   const [isFitModalOpen, setIsFitModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const skipAutoSync = useRef(false);
 
   const openQuickCapture = () => setIsQuickCaptureOpen(true);
   const closeQuickCapture = () => setIsQuickCaptureOpen(false);
@@ -169,7 +174,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const openFitModal = () => setIsFitModalOpen(true);
   const closeFitModal = () => setIsFitModalOpen(false);
 
-  // Shift 14x14 configuration (defaulting to Day 4 of Rest)
+  // Shift 14x14 configuration
   const [shiftConfig, setShiftConfig] = useState<ShiftConfig>(DEFAULT_SHIFT_CONFIG);
 
   // Core collections initialized from LocalStorage or seedData
@@ -193,7 +198,26 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isSigningIn, setIsSigningIn] = useState<boolean>(false);
 
-  // Load state on mount and listen to Firebase Auth
+  // Track snapshot listeners so we can teardown on logout
+  const unsubscribers = useRef<(() => void)[]>([]);
+  const teardownListeners = () => {
+    unsubscribers.current.forEach(u => u());
+    unsubscribers.current = [];
+  };
+
+  // Track if we are in the initial auth load to avoid saving stale localStorage
+  const initialLoadDone = useRef(false);
+
+  // Firestore snapshot setters — maps collection name to its state setter
+  const setterMap: Record<string, (data: any) => void> = {
+    tasks: setTasks, habits: setHabits, habitLogs: setHabitLogs,
+    accounts: setAccounts, budgets: setBudgets, debts: setDebts,
+    transactions: setTransactions, books: setBooks,
+    readingLogs: setReadingLogs, bookNotes: setBookNotes,
+    projects: setProjects, healthLogs: setHealthLogs,
+  };
+
+  // Load state from localStorage on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -217,120 +241,151 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (e) {
       console.error('Error reading localStorage for LifeOS:', e);
     }
+    initialLoadDone.current = true;
   }, []);
 
-  // Firebase Auth listener and Cloud Firestore initial load
+  // --- Firestore helpers ---
+
+  const migrateLegacyData = async (uid: string, lifeOSData: any) => {
+    const writes: Promise<void>[] = [];
+    for (const colName of COLLECTIONS) {
+      const items = lifeOSData[colName];
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          if (item.id) {
+            writes.push(setDoc(docRef(uid, colName, item.id), item).catch(e =>
+              console.error(`Error migrating ${colName}/${item.id}:`, e)
+            ));
+          }
+        }
+      }
+    }
+    // Single config docs
+    if (lifeOSData.shiftConfig) {
+      writes.push(setDoc(doc(db, 'users', uid, 'config', 'shift'), lifeOSData.shiftConfig));
+    }
+    if (lifeOSData.healthProfile) {
+      writes.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), lifeOSData.healthProfile));
+    }
+    await Promise.all(writes);
+  };
+
+  const loadFromSubcollections = async (uid: string) => {
+    const promises = COLLECTIONS.map(async (colName) => {
+      try {
+        const snapshot = await getDocs(query(col(uid, colName), orderBy('createdAt', 'desc')));
+        if (!snapshot.empty) {
+          const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+          setterMap[colName](data);
+        }
+      } catch (e) {
+        console.error(`Error loading ${colName}:`, e);
+      }
+    });
+    // Load single config docs
+    promises.push(
+      getDoc(doc(db, 'users', uid, 'config', 'shift')).then(snap => {
+        if (snap.exists()) setShiftConfig(snap.data() as ShiftConfig);
+      }).catch(e => console.error('Error loading shift config:', e))
+    );
+    promises.push(
+      getDoc(doc(db, 'users', uid, 'config', 'healthProfile')).then(snap => {
+        if (snap.exists()) setHealthProfile(snap.data() as HealthProfile);
+      }).catch(e => console.error('Error loading health profile:', e))
+    );
+    await Promise.all(promises);
+  };
+
+  const setupSnapshotListeners = (uid: string) => {
+    teardownListeners();
+    for (const colName of COLLECTIONS) {
+      const unsub = onSnapshot(
+        query(col(uid, colName), orderBy('createdAt', 'desc')),
+        (snapshot) => {
+          const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+          setterMap[colName](data);
+        },
+        (err) => console.error(`Error in ${colName} listener:`, err)
+      );
+      unsubscribers.current.push(unsub);
+    }
+    // Listeners for single config docs
+    const unsubShift = onSnapshot(
+      doc(db, 'users', uid, 'config', 'shift'),
+      (snap) => { if (snap.exists()) setShiftConfig(snap.data() as ShiftConfig); },
+      (err) => console.error('Error in shiftConfig listener:', err)
+    );
+    unsubscribers.current.push(unsubShift);
+    const unsubHealth = onSnapshot(
+      doc(db, 'users', uid, 'config', 'healthProfile'),
+      (snap) => { if (snap.exists()) setHealthProfile(snap.data() as HealthProfile); },
+      (err) => console.error('Error in healthProfile listener:', err)
+    );
+    unsubscribers.current.push(unsubHealth);
+  };
+
+  // Write helper: updates local state AND writes to Firestore
+  const writeToFirestore = async (uid: string, sub: string, id: string, data: any) => {
+    try {
+      await setDoc(docRef(uid, sub, id), data);
+    } catch (e) {
+      console.error(`Error writing ${sub}/${id} to Firestore:`, e);
+    }
+  };
+
+  const deleteFromFirestore = async (uid: string, sub: string, id: string) => {
+    try {
+      await deleteDoc(docRef(uid, sub, id));
+    } catch (e) {
+      console.error(`Error deleting ${sub}/${id} from Firestore:`, e);
+    }
+  };
+
+  // --- Auth Listener ---
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        skipAutoSync.current = true;
         setIsSyncing(true);
         try {
+          // 1. Check for legacy lifeOSData migration
           const userDocRef = doc(db, 'users', user.uid);
-          const docSnap = await getDoc(userDocRef);
-          if (docSnap.exists() && docSnap.data().lifeOSData) {
-            const remoteData = docSnap.data().lifeOSData;
-            const remoteUpdatedAt: string | undefined = docSnap.data().updatedAt;
-            const localUpdatedAt = localStorage.getItem(LAST_UPDATED_KEY);
-
-            const localNewer = localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt;
-
-            if (localNewer) {
-              const lifeOSData = {
-                tasks, habits, habitLogs, accounts, budgets, debts, transactions,
-                books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
-              };
-              await setDoc(userDocRef, {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-                updatedAt: localUpdatedAt,
-                lifeOSData
-              }, { merge: true });
-              showToast('Datos locales subidos a la nube (mas recientes).');
-            } else {
-              if (remoteData.tasks) setTasks(remoteData.tasks);
-              if (remoteData.habits) setHabits(remoteData.habits);
-              if (remoteData.habitLogs) setHabitLogs(remoteData.habitLogs);
-              if (remoteData.accounts) setAccounts(remoteData.accounts);
-              if (remoteData.budgets) setBudgets(remoteData.budgets);
-              if (remoteData.debts) setDebts(remoteData.debts);
-              if (remoteData.transactions) setTransactions(remoteData.transactions);
-              if (remoteData.books) setBooks(remoteData.books);
-              if (remoteData.readingLogs) setReadingLogs(remoteData.readingLogs);
-              if (remoteData.bookNotes) setBookNotes(remoteData.bookNotes);
-              if (remoteData.projects) setProjects(remoteData.projects);
-              if (remoteData.shiftConfig) setShiftConfig(remoteData.shiftConfig);
-              if (remoteData.healthProfile) setHealthProfile(remoteData.healthProfile);
-              if (remoteData.healthLogs) setHealthLogs(remoteData.healthLogs);
-              localStorage.setItem(LAST_UPDATED_KEY, remoteUpdatedAt || new Date().toISOString());
-              showToast(`Bienvenido ${user.displayName || user.email}. Datos sincronizados desde la nube.`);
-            }
-          } else {
-            const lifeOSData = {
-              tasks, habits, habitLogs, accounts, budgets, debts, transactions,
-              books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
-            };
-            const lastUpdated = new Date().toISOString();
-            await setDoc(userDocRef, {
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              photoURL: user.photoURL,
-              updatedAt: lastUpdated,
-              lifeOSData
-            });
-            localStorage.setItem(LAST_UPDATED_KEY, lastUpdated);
-            showToast('Cuenta de Google vinculada. Sincronizacion inicial completada.');
+          const userDoc = await getDoc(userDocRef);
+          const legacy = userDoc.exists() && userDoc.data().lifeOSData;
+          if (legacy) {
+            await migrateLegacyData(user.uid, userDoc.data().lifeOSData);
+            await setDoc(userDocRef, { lifeOSData: deleteField() }, { merge: true });
           }
+
+          // 2. Load data from Firestore subcollections
+          await loadFromSubcollections(user.uid);
+
+          // 3. Set up real-time listeners
+          setupSnapshotListeners(user.uid);
         } catch (error) {
-          console.error('Error loading Firestore document:', error);
+          console.error('Error loading Firestore data:', error);
         } finally {
           setIsSyncing(false);
-          skipAutoSync.current = false;
         }
+      } else {
+        teardownListeners();
       }
     });
-    return () => unsubscribe();
+    return () => { unsubscribe(); teardownListeners(); };
   }, []);
 
-  // Sync to LocalStorage & Auto-sync to Cloud Firestore if logged in
+  // --- Sync to LocalStorage (every state change, regardless of auth) ---
   useEffect(() => {
     try {
-      const lastUpdated = new Date().toISOString();
       const dataToSave = {
         tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
       };
-      localStorage.setItem(LAST_UPDATED_KEY, lastUpdated);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
-
-      if (currentUser && !skipAutoSync.current) {
-        const syncDebounce = setTimeout(async () => {
-          try {
-            setIsSyncing(true);
-            const userDocRef = doc(db, 'users', currentUser.uid);
-            await setDoc(userDocRef, {
-              uid: currentUser.uid,
-              email: currentUser.email,
-              displayName: currentUser.displayName,
-              photoURL: currentUser.photoURL,
-              updatedAt: lastUpdated,
-              lifeOSData: dataToSave
-            }, { merge: true });
-          } catch (e) {
-            console.error('Error auto-syncing to Firestore:', e);
-          } finally {
-            setIsSyncing(false);
-          }
-        }, 1500);
-        return () => clearTimeout(syncDebounce);
-      }
     } catch (e) {
       console.error('Error saving to localStorage:', e);
     }
-  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs, currentUser]);
+  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs]);
 
   const signInWithGoogle = async () => {
     setIsSigningIn(true);
@@ -370,21 +425,24 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (!currentUser) return;
     setIsSyncing(true);
     try {
-      const lastUpdated = new Date().toISOString();
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const lifeOSData = {
-        tasks, habits, habitLogs, accounts, budgets, debts, transactions,
-        books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
-      };
-      await setDoc(userDocRef, {
-        uid: currentUser.uid,
-        email: currentUser.email,
-        displayName: currentUser.displayName,
-        photoURL: currentUser.photoURL,
-        updatedAt: lastUpdated,
-        lifeOSData
-      }, { merge: true });
-      localStorage.setItem(LAST_UPDATED_KEY, lastUpdated);
+      const uid = currentUser.uid;
+      // Write every entity to its subcollection
+      const allWrites: Promise<void>[] = [];
+      for (const t of tasks) allWrites.push(writeToFirestore(uid, 'tasks', t.id, t));
+      for (const h of habits) allWrites.push(writeToFirestore(uid, 'habits', h.id, h));
+      for (const l of habitLogs) allWrites.push(writeToFirestore(uid, 'habitLogs', l.id, l));
+      for (const a of accounts) allWrites.push(writeToFirestore(uid, 'accounts', a.id, a));
+      for (const b of budgets) allWrites.push(writeToFirestore(uid, 'budgets', b.id, b));
+      for (const d of debts) allWrites.push(writeToFirestore(uid, 'debts', d.id, d));
+      for (const t of transactions) allWrites.push(writeToFirestore(uid, 'transactions', t.id, t));
+      for (const b of books) allWrites.push(writeToFirestore(uid, 'books', b.id, b));
+      for (const l of readingLogs) allWrites.push(writeToFirestore(uid, 'readingLogs', l.id, l));
+      for (const n of bookNotes) allWrites.push(writeToFirestore(uid, 'bookNotes', n.id, n));
+      for (const p of projects) allWrites.push(writeToFirestore(uid, 'projects', p.id, p));
+      for (const l of healthLogs) allWrites.push(writeToFirestore(uid, 'healthLogs', l.id, l));
+      allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'shift'), shiftConfig));
+      allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), healthProfile));
+      await Promise.all(allWrites);
       showToast('Sincronizado con Google Cloud Firestore ✓');
     } catch (error) {
       console.error('Error manual syncing to cloud:', error);
@@ -393,7 +451,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  // Derived shift info for today
+  // Derived shift info
   const shiftInfo = calculateShiftInfo(shiftConfig);
 
   const openShiftCalibration = () => setIsShiftCalibrationOpen(true);
@@ -402,16 +460,18 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const calibrateShift = (dayInPhase: number, phase: ShiftType, restDays = 14, workDays = 14) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const newAnchorDate = getAnchorDateForDay(dayInPhase, phase, todayStr);
-
     setShiftConfig((prev) => ({
       ...prev,
-      restDays,
-      workDays,
+      restDays, workDays,
       currentPhase: phase,
       currentDayInPhase: dayInPhase,
       anchorDate: newAnchorDate,
     }));
-
+    if (currentUser) {
+      setDoc(doc(db, 'users', currentUser.uid, 'config', 'shift'), {
+        restDays, workDays, currentPhase: phase, currentDayInPhase: dayInPhase, anchorDate: newAnchorDate
+      }, { merge: true }).catch(e => console.error('Error saving shift config:', e));
+    }
     showToast(`Turno calibrado: Día ${dayInPhase} de ${dayInPhase > restDays ? workDays : restDays} (${phase === 'rest' ? 'Descanso' : 'Faena Minera'})`);
   };
 
@@ -430,7 +490,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     localStorage.setItem('lifeos_dark_mode', String(darkMode));
   }, [darkMode]);
 
-  // Update Android widget with shift status
+  // Update Android widget
   useEffect(() => {
     const status = shiftInfo.phase === 'rest' ? 'Descanso 🏠' : 'Faena ⛏️';
     const day = `Día ${shiftInfo.dayInPhase} de ${shiftInfo.phase === 'rest' ? shiftInfo.restDays : shiftInfo.workDays}`;
@@ -442,14 +502,11 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const checkBudgetAlert = (newTx: Transaction, currentBudgets: Budget[], currentTxs: Transaction[]) => {
     const now = new Date();
     const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    
     for (const budget of currentBudgets) {
       const spent = currentTxs
         .filter(t => t.type === 'expense' && t.category === budget.category && t.date?.startsWith(monthStr))
         .reduce((sum, t) => sum + t.amount, 0);
-      
       const pct = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
-      
       if (pct >= 100) {
         showToast(`ALERTA: Presupuesto "${budget.category}" excedido! $${spent.toLocaleString()} / $${budget.limit.toLocaleString()}`);
       } else if (pct >= 80) {
@@ -473,12 +530,10 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         origin: { y: 0.8 },
         colors: ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B']
       });
-    } catch (e) {
-      // fallback if canvas canvas-confetti issue
-    }
+    } catch (e) { /* fallback */ }
   };
 
-  // Quick Capture Parser Logic (Natural Language)
+  // Quick Capture Parser
   const parseQuickCapture = (text: string): QuickCaptureParsed => {
     const trimmed = text.trim();
     let priority: Priority = 'p4';
@@ -488,19 +543,16 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     let amount: number | undefined = undefined;
     let pages: number | undefined = undefined;
 
-    // Detect Priority p1-p4
     if (/\bp1\b/i.test(trimmed)) priority = 'p1';
     else if (/\bp2\b/i.test(trimmed)) priority = 'p2';
     else if (/\bp3\b/i.test(trimmed)) priority = 'p3';
 
-    // Detect Area hashtags e.g. #Salud, #Trabajo, #Finanzas, #Desarrollo, #Hogar
     if (/#salud|#health/i.test(trimmed)) areaId = 'area_health';
     else if (/#trabajo|#work/i.test(trimmed)) areaId = 'area_work';
     else if (/#finanzas|#finance/i.test(trimmed)) areaId = 'area_finance';
     else if (/#desarrollo|#aprender|#learning/i.test(trimmed)) areaId = 'area_learning';
     else if (/#hogar|#home/i.test(trimmed)) areaId = 'area_home';
 
-    // Detect Dollar or Expense e.g. "$25" or "25$" or "gasto $25"
     const amountMatch = trimmed.match(/(\$|USD\s*)?(\d+(\.\d{1,2})?)(\$)?/i);
     if (trimmed.includes('$') || /\b(gasto|compra|pago)\b/i.test(trimmed)) {
       if (amountMatch && amountMatch[2]) {
@@ -509,32 +561,23 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     }
 
-    // Detect Reading e.g. "leer 20 paginas" or "página 150"
     const pagesMatch = trimmed.match(/\b(leer|pág|pag|páginas)\s*(\d+)/i);
     if (pagesMatch) {
       type = 'reading';
       pages = parseInt(pagesMatch[2], 10);
     }
 
-    // Detect Habit e.g. "habito" or "diario"
     if (/\b(hábito|habito|diario|todos los días)\b/i.test(trimmed)) {
       type = 'habit';
     }
 
-    // Clean title by stripping tags
     const cleanTitle = trimmed
       .replace(/#\w+/g, '')
       .replace(/\bp[1-4]\b/gi, '')
       .trim();
 
     return {
-      title: cleanTitle || text,
-      type,
-      priority,
-      areaId,
-      dueDate,
-      amount,
-      pages,
+      title: cleanTitle || text, type, priority, areaId, dueDate, amount, pages,
     };
   };
 
@@ -570,8 +613,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
 
     if (parsed.type === 'habit') {
-      const newHabit: Habit = {
-        id: `habit_${Date.now()}`,
+      addHabit({
         title: parsed.title,
         areaId: parsed.areaId || 'area_health',
         color: '#10B981',
@@ -579,11 +621,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         frequency: 'daily',
         targetValue: 1,
         unit: 'veces',
-        streak: 0,
-        bestStreak: 0,
-        createdAt: todayStr,
-      };
-      setHabits((prev) => [newHabit, ...prev]);
+      });
       showToast(`Nuevo hábito "${parsed.title}" creado.`);
       return { success: true, message: `Hábito "${parsed.title}" registrado.` };
     }
@@ -612,6 +650,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       createdAt: new Date().toISOString().split('T')[0],
     };
     setTasks((prev) => [newTask, ...prev]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'tasks', newTask.id, newTask);
   };
 
   const toggleTaskStatus = (taskId: string) => {
@@ -620,11 +659,13 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (task.id === taskId) {
           const isCompleting = task.status !== 'completed';
           if (isCompleting) triggerConfetti();
-          return {
+          const updated = {
             ...task,
             status: isCompleting ? 'completed' : 'todo',
             completedAt: isCompleting ? new Date().toISOString().split('T')[0] : undefined,
           };
+          if (currentUser) writeToFirestore(currentUser.uid, 'tasks', taskId, updated);
+          return updated;
         }
         return task;
       })
@@ -633,11 +674,13 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const deleteTask = (taskId: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    if (currentUser) deleteFromFirestore(currentUser.uid, 'tasks', taskId);
     showToast('Tarea eliminada.');
   };
 
   const updateTask = (updatedTask: Task) => {
     setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
+    if (currentUser) writeToFirestore(currentUser.uid, 'tasks', updatedTask.id, updatedTask);
     showToast('Tarea actualizada.');
   };
 
@@ -652,16 +695,19 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       milestones: projectData.milestones || [],
     };
     setProjects((prev) => [...prev, newProj]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'projects', newProj.id, newProj);
     showToast(`Proyecto "${newProj.name}" creado.`);
   };
 
   const updateProject = (updatedProj: Project) => {
     setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
+    if (currentUser) writeToFirestore(currentUser.uid, 'projects', updatedProj.id, updatedProj);
     showToast(`Proyecto "${updatedProj.name}" actualizado.`);
   };
 
   const deleteProject = (projectId: string) => {
     setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    if (currentUser) deleteFromFirestore(currentUser.uid, 'projects', projectId);
     showToast('Proyecto eliminado.');
   };
 
@@ -676,16 +722,16 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           const totalCount = updatedMilestones.length;
           const calcProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : proj.progress || 0;
 
-          if (calcProgress === 100 && proj.progress !== 100) {
-            triggerConfetti();
-          }
+          if (calcProgress === 100 && proj.progress !== 100) triggerConfetti();
 
-          return {
+          const updated = {
             ...proj,
             milestones: updatedMilestones,
             progress: calcProgress,
             status: calcProgress === 100 ? 'completed' : proj.status,
           };
+          if (currentUser) writeToFirestore(currentUser.uid, 'projects', projectId, updated);
+          return updated;
         }
         return proj;
       })
@@ -702,45 +748,44 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       createdAt: new Date().toISOString().split('T')[0],
     };
     setHabits((prev) => [newHabit, ...prev]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'habits', newHabit.id, newHabit);
     showToast(`Hábito "${newHabit.title}" creado.`);
   };
 
   const logHabit = (habitId: string, dateStr = new Date().toISOString().split('T')[0], value = 1) => {
     const existingLog = habitLogs.find((l) => l.habitId === habitId && l.date === dateStr);
-    
+
     if (existingLog) {
-      // Toggle off or delete log
       setHabitLogs((prev) => prev.filter((l) => l.id !== existingLog.id));
-      // recalculate streak
+      if (currentUser) deleteFromFirestore(currentUser.uid, 'habitLogs', existingLog.id);
       setHabits((prev) =>
         prev.map((h) => {
           if (h.id === habitId) {
             const newStreak = Math.max(0, h.streak - 1);
-            return { ...h, streak: newStreak };
+            const updated = { ...h, streak: newStreak };
+            if (currentUser) writeToFirestore(currentUser.uid, 'habits', habitId, updated);
+            return updated;
           }
           return h;
         })
       );
       showToast('Registro de hábito removido.');
     } else {
-      // Create new log
       const newLog: HabitLog = {
         id: `hl_${habitId}_${dateStr}`,
-        habitId,
-        date: dateStr,
-        value,
-        completed: true,
+        habitId, date: dateStr, value, completed: true,
       };
       setHabitLogs((prev) => [newLog, ...prev]);
-      
+      if (currentUser) writeToFirestore(currentUser.uid, 'habitLogs', newLog.id, newLog);
       triggerConfetti();
-      
       setHabits((prev) =>
         prev.map((h) => {
           if (h.id === habitId) {
             const newStreak = h.streak + 1;
             const newBest = Math.max(h.bestStreak, newStreak);
-            return { ...h, streak: newStreak, bestStreak: newBest };
+            const updated = { ...h, streak: newStreak, bestStreak: newBest };
+            if (currentUser) writeToFirestore(currentUser.uid, 'habits', habitId, updated);
+            return updated;
           }
           return h;
         })
@@ -752,18 +797,19 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const deleteHabit = (habitId: string) => {
     setHabits((prev) => prev.filter((h) => h.id !== habitId));
     setHabitLogs((prev) => prev.filter((l) => l.habitId !== habitId));
+    if (currentUser) {
+      deleteFromFirestore(currentUser.uid, 'habits', habitId);
+      habitLogs.filter(l => l.habitId === habitId).forEach(l => deleteFromFirestore(currentUser.uid, 'habitLogs', l.id));
+    }
     showToast('Hábito eliminado.');
   };
 
   // --- Financial Operations ---
   const addTransaction = (txData: Omit<Transaction, 'id'>) => {
     const newTx: Transaction = {
-      ...txData,
-      id: `tx_${Date.now()}`,
+      ...txData, id: `tx_${Date.now()}`,
     };
     setTransactions((prev) => [newTx, ...prev]);
-
-    // Update account balance
     setAccounts((prev) =>
       prev.map((acc) => {
         if (acc.id === newTx.accountId) {
@@ -773,40 +819,39 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return acc;
       })
     );
-
-    // Check budgets after transaction
-    if (newTx.type === 'expense') {
-      checkBudgetAlert(newTx, budgets, transactions);
+    if (currentUser) {
+      writeToFirestore(currentUser.uid, 'transactions', newTx.id, newTx);
+      // Also update the account balance in Firestore
+      const acc = accounts.find(a => a.id === newTx.accountId);
+      if (acc) {
+        const delta = newTx.type === 'expense' ? -newTx.amount : newTx.amount;
+        writeToFirestore(currentUser.uid, 'accounts', acc.id, { ...acc, balance: acc.balance + delta });
+      }
     }
-
+    if (newTx.type === 'expense') checkBudgetAlert(newTx, budgets, transactions);
     showToast('Transacción agregada.');
   };
 
   const updateTransaction = (updatedTx: Transaction) => {
     const oldTx = transactions.find((t) => t.id === updatedTx.id);
-    if (oldTx) {
-      // Revert old effect and apply new effect on balances
+    if (oldTx && currentUser) {
       setAccounts((prev) =>
         prev.map((acc) => {
           let balance = acc.balance;
-          if (acc.id === oldTx.accountId) {
-            balance += oldTx.type === 'expense' ? oldTx.amount : -oldTx.amount;
-          }
-          if (acc.id === updatedTx.accountId) {
-            balance += updatedTx.type === 'expense' ? -updatedTx.amount : updatedTx.amount;
-          }
+          if (acc.id === oldTx.accountId) balance += oldTx.type === 'expense' ? oldTx.amount : -oldTx.amount;
+          if (acc.id === updatedTx.accountId) balance += updatedTx.type === 'expense' ? -updatedTx.amount : updatedTx.amount;
           return { ...acc, balance };
         })
       );
     }
     setTransactions((prev) => prev.map((t) => (t.id === updatedTx.id ? updatedTx : t)));
+    if (currentUser) writeToFirestore(currentUser.uid, 'transactions', updatedTx.id, updatedTx);
     showToast('Transacción actualizada.');
   };
 
   const deleteTransaction = (txId: string) => {
     const target = transactions.find((t) => t.id === txId);
     if (target) {
-      // Reverse account balance effect
       setAccounts((prev) =>
         prev.map((acc) => {
           if (acc.id === target.accountId) {
@@ -816,6 +861,14 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           return acc;
         })
       );
+      if (currentUser) {
+        deleteFromFirestore(currentUser.uid, 'transactions', txId);
+        const acc = accounts.find(a => a.id === target.accountId);
+        if (acc) {
+          const reverseDelta = target.type === 'expense' ? target.amount : -target.amount;
+          writeToFirestore(currentUser.uid, 'accounts', acc.id, { ...acc, balance: acc.balance + reverseDelta });
+        }
+      }
     }
     setTransactions((prev) => prev.filter((t) => t.id !== txId));
     showToast('Transacción eliminada.');
@@ -824,33 +877,39 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const addAccount = (accData: Omit<FinancialAccount, 'id'>) => {
     const newAcc: FinancialAccount = { ...accData, id: `acc_${Date.now()}` };
     setAccounts((prev) => [...prev, newAcc]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'accounts', newAcc.id, newAcc);
     showToast(`Cuenta "${newAcc.name}" agregada.`);
   };
 
   const updateAccount = (updatedAcc: FinancialAccount) => {
     setAccounts((prev) => prev.map((a) => (a.id === updatedAcc.id ? updatedAcc : a)));
+    if (currentUser) writeToFirestore(currentUser.uid, 'accounts', updatedAcc.id, updatedAcc);
     showToast(`Cuenta "${updatedAcc.name}" actualizada.`);
   };
 
   const deleteAccount = (accId: string) => {
     const target = accounts.find((a) => a.id === accId);
     setAccounts((prev) => prev.filter((a) => a.id !== accId));
+    if (currentUser) deleteFromFirestore(currentUser.uid, 'accounts', accId);
     showToast(`Cuenta "${target?.name || ''}" eliminada.`);
   };
 
   const addBudget = (budgetData: Omit<Budget, 'id'>) => {
     const newBudget: Budget = { ...budgetData, id: `bud_${Date.now()}` };
     setBudgets((prev) => [...prev, newBudget]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'budgets', newBudget.id, newBudget);
     showToast(`Presupuesto para "${newBudget.category}" configurado.`);
   };
 
   const updateBudget = (updatedBudget: Budget) => {
     setBudgets((prev) => prev.map((b) => (b.id === updatedBudget.id ? updatedBudget : b)));
+    if (currentUser) writeToFirestore(currentUser.uid, 'budgets', updatedBudget.id, updatedBudget);
     showToast(`Presupuesto para "${updatedBudget.category}" actualizado.`);
   };
 
   const deleteBudget = (budgetId: string) => {
     setBudgets((prev) => prev.filter((b) => b.id !== budgetId));
+    if (currentUser) deleteFromFirestore(currentUser.uid, 'budgets', budgetId);
     showToast('Presupuesto eliminado.');
   };
 
@@ -858,17 +917,20 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const addDebt = (debtData: Omit<Debt, 'id'>) => {
     const newDebt: Debt = { ...debtData, id: `debt_${Date.now()}` };
     setDebts((prev) => [...prev, newDebt]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'debts', newDebt.id, newDebt);
     showToast(`Deuda "${newDebt.name}" registrada.`);
   };
 
   const updateDebt = (updatedDebt: Debt) => {
     setDebts((prev) => prev.map((d) => (d.id === updatedDebt.id ? updatedDebt : d)));
+    if (currentUser) writeToFirestore(currentUser.uid, 'debts', updatedDebt.id, updatedDebt);
     showToast(`Deuda "${updatedDebt.name}" actualizada.`);
   };
 
   const deleteDebt = (debtId: string) => {
     const target = debts.find((d) => d.id === debtId);
     setDebts((prev) => prev.filter((d) => d.id !== debtId));
+    if (currentUser) deleteFromFirestore(currentUser.uid, 'debts', debtId);
     showToast(`Deuda "${target?.name || ''}" eliminada.`);
   };
 
@@ -880,42 +942,38 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       createdAt: new Date().toISOString().split('T')[0],
     };
     setBooks((prev) => [newBook, ...prev]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'books', newBook.id, newBook);
     showToast(`Libro "${newBook.title}" agregado a tu biblioteca.`);
   };
 
   const updateBookProgress = (bookId: string, newPage: number, notes?: string) => {
     const todayStr = new Date().toISOString().split('T')[0];
-
     setBooks((prev) =>
       prev.map((b) => {
         if (b.id === bookId) {
           const startP = b.currentPage;
           const endP = Math.min(newPage, b.totalPages);
           const pagesDiff = Math.max(0, endP - startP);
-          const isCompleted = endP >= b.totalPages;
 
           if (pagesDiff > 0) {
-            // Log reading session
             const newLog: ReadingLog = {
               id: `rl_${Date.now()}`,
-              bookId,
-              date: todayStr,
-              pagesRead: pagesDiff,
-              startPage: startP,
-              endPage: endP,
-              notes,
+              bookId, date: todayStr, pagesRead: pagesDiff, startPage: startP, endPage: endP, notes,
             };
             setReadingLogs((logs) => [newLog, ...logs]);
+            if (currentUser) writeToFirestore(currentUser.uid, 'readingLogs', newLog.id, newLog);
           }
 
-          if (isCompleted) triggerConfetti();
+          if (endP >= b.totalPages) triggerConfetti();
 
-          return {
+          const updated = {
             ...b,
             currentPage: endP,
-            status: isCompleted ? 'completed' : 'reading',
-            finishDate: isCompleted ? todayStr : b.finishDate,
+            status: endP >= b.totalPages ? 'completed' : 'reading',
+            finishDate: endP >= b.totalPages ? todayStr : b.finishDate,
           };
+          if (currentUser) writeToFirestore(currentUser.uid, 'books', bookId, updated);
+          return updated;
         }
         return b;
       })
@@ -924,7 +982,14 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const updateBookStatus = (bookId: string, status: Book['status']) => {
     setBooks((prev) =>
-      prev.map((b) => (b.id === bookId ? { ...b, status } : b))
+      prev.map((b) => {
+        if (b.id === bookId) {
+          const updated = { ...b, status };
+          if (currentUser) writeToFirestore(currentUser.uid, 'books', bookId, updated);
+          return updated;
+        }
+        return b;
+      })
     );
     showToast('Estado del libro actualizado.');
   };
@@ -936,26 +1001,33 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       createdAt: new Date().toISOString().split('T')[0],
     };
     setBookNotes((prev) => [newNote, ...prev]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'bookNotes', newNote.id, newNote);
     showToast('Nota de lectura guardada.');
   };
 
   // Health Actions
   const updateHealthProfile = (partialProfile: Partial<HealthProfile>) => {
-    setHealthProfile((prev) => ({ ...prev, ...partialProfile }));
+    setHealthProfile((prev) => {
+      const updated = { ...prev, ...partialProfile };
+      if (currentUser) {
+        setDoc(doc(db, 'users', currentUser.uid, 'config', 'healthProfile'), updated, { merge: true })
+          .catch(e => console.error('Error saving health profile:', e));
+      }
+      return updated;
+    });
     showToast('Perfil médico y de salud actualizado.');
   };
 
   const addHealthLog = (logData: Omit<HealthLog, 'id'>) => {
-    const newLog: HealthLog = {
-      ...logData,
-      id: `hlog_${Date.now()}`,
-    };
+    const newLog: HealthLog = { ...logData, id: `hlog_${Date.now()}` };
     setHealthLogs((prev) => [newLog, ...prev]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'healthLogs', newLog.id, newLog);
     showToast('Registro de constantes vitales guardado.');
   };
 
   const deleteHealthLog = (id: string) => {
     setHealthLogs((prev) => prev.filter((l) => l.id !== id));
+    if (currentUser) deleteFromFirestore(currentUser.uid, 'healthLogs', id);
     showToast('Registro de salud eliminado.');
   };
 
@@ -990,7 +1062,6 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setHealthLogs(initialHealthLogs);
       setShiftConfig(DEFAULT_SHIFT_CONFIG);
       localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(LAST_UPDATED_KEY);
       localStorage.clear();
       showToast('LifeOS reiniciado con parámetros limpios para comenzar hoy.');
     }
@@ -999,88 +1070,30 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   return (
     <LifeOSContext.Provider
       value={{
-        activeTab,
-        setActiveTab,
-        darkMode,
-        toggleDarkMode,
-        currentUser,
-        isSyncing,
-        isSigningIn,
-        signInWithGoogle,
-        logout,
-        syncToCloud,
-        shiftConfig,
-        shiftInfo,
-        isShiftCalibrationOpen,
-        openShiftCalibration,
-        closeShiftCalibration,
-        calibrateShift,
-        updateShiftConfig,
-        areas,
-        projects,
-        tasks,
-        habits,
-        habitLogs,
-        accounts,
-        budgets,
-        debts,
-        transactions,
-        books,
-        readingLogs,
-        bookNotes,
-        healthProfile,
-        healthLogs,
-        updateHealthProfile,
-        addHealthLog,
-        deleteHealthLog,
-        isQuickCaptureOpen,
-        openQuickCapture,
-        closeQuickCapture,
-        isAICopilotOpen,
-        openAICopilot,
-        closeAICopilot,
-        isVoiceModalOpen,
-        openVoiceModal,
-        closeVoiceModal,
-        parseQuickCapture,
-        executeQuickCapture,
-        addTask,
-        toggleTaskStatus,
-        deleteTask,
-        updateTask,
-        addProject,
-        addHabit,
-        logHabit,
-        deleteHabit,
-        addTransaction,
-        updateTransaction,
-        deleteTransaction,
-        addAccount,
-        updateAccount,
-        deleteAccount,
-        addBudget,
-        updateBudget,
-        deleteBudget,
-        addDebt,
-        updateDebt,
-        deleteDebt,
-        addBook,
-        updateBookProgress,
-        updateBookStatus,
-        addBookNote,
-        exportDataJSON,
-        resetToDefaults,
-        toastMessage,
-        showToast,
-        isCalendarModalOpen,
-        openCalendarModal,
-        closeCalendarModal,
-        isNotificationsModalOpen,
-        openNotificationsModal,
-        closeNotificationsModal,
-        isFitModalOpen,
-        openFitModal,
-        closeFitModal,
+        activeTab, setActiveTab, darkMode, toggleDarkMode,
+        currentUser, isSyncing, isSigningIn, signInWithGoogle, logout, syncToCloud,
+        shiftConfig, shiftInfo, isShiftCalibrationOpen, openShiftCalibration, closeShiftCalibration,
+        calibrateShift, updateShiftConfig,
+        areas, projects, tasks, habits, habitLogs, accounts, budgets, debts, transactions,
+        books, readingLogs, bookNotes, healthProfile, healthLogs,
+        updateHealthProfile, addHealthLog, deleteHealthLog,
+        isQuickCaptureOpen, openQuickCapture, closeQuickCapture,
+        isAICopilotOpen, openAICopilot, closeAICopilot,
+        isVoiceModalOpen, openVoiceModal, closeVoiceModal,
+        parseQuickCapture, executeQuickCapture,
+        addTask, toggleTaskStatus, deleteTask, updateTask,
+        addProject, updateProject, deleteProject, toggleProjectMilestone,
+        addHabit, logHabit, deleteHabit,
+        addTransaction, updateTransaction, deleteTransaction,
+        addAccount, updateAccount, deleteAccount,
+        addBudget, updateBudget, deleteBudget,
+        addDebt, updateDebt, deleteDebt,
+        addBook, updateBookProgress, updateBookStatus, addBookNote,
+        exportDataJSON, resetToDefaults,
+        toastMessage, showToast,
+        isCalendarModalOpen, openCalendarModal, closeCalendarModal,
+        isNotificationsModalOpen, openNotificationsModal, closeNotificationsModal,
+        isFitModalOpen, openFitModal, closeFitModal,
       }}
     >
       {children}
