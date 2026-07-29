@@ -234,9 +234,23 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const remoteUpdatedAt: string | undefined = docSnap.data().updatedAt;
             const localUpdatedAt = localStorage.getItem(LAST_UPDATED_KEY);
 
-            const remoteNewer = remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt);
+            const localNewer = localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt;
 
-            if (remoteNewer) {
+            if (localNewer) {
+              const lifeOSData = {
+                tasks, habits, habitLogs, accounts, budgets, debts, transactions,
+                books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
+              };
+              await setDoc(userDocRef, {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+                updatedAt: localUpdatedAt,
+                lifeOSData
+              }, { merge: true });
+              showToast('Datos locales subidos a la nube (mas recientes).');
+            } else {
               if (remoteData.tasks) setTasks(remoteData.tasks);
               if (remoteData.habits) setHabits(remoteData.habits);
               if (remoteData.habitLogs) setHabitLogs(remoteData.habitLogs);
@@ -251,24 +265,8 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               if (remoteData.shiftConfig) setShiftConfig(remoteData.shiftConfig);
               if (remoteData.healthProfile) setHealthProfile(remoteData.healthProfile);
               if (remoteData.healthLogs) setHealthLogs(remoteData.healthLogs);
-              localStorage.setItem(LAST_UPDATED_KEY, remoteUpdatedAt);
+              localStorage.setItem(LAST_UPDATED_KEY, remoteUpdatedAt || new Date().toISOString());
               showToast(`Bienvenido ${user.displayName || user.email}. Datos sincronizados desde la nube.`);
-            } else {
-              const lifeOSData = {
-                tasks, habits, habitLogs, accounts, budgets, debts, transactions,
-                books, readingLogs, bookNotes, projects, shiftConfig, healthProfile, healthLogs
-              };
-              const lastUpdated = localUpdatedAt || new Date().toISOString();
-              await setDoc(userDocRef, {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-                updatedAt: lastUpdated,
-                lifeOSData
-              }, { merge: true });
-              localStorage.setItem(LAST_UPDATED_KEY, lastUpdated);
-              showToast('Datos locales subidos a la nube (mas recientes).');
             }
           } else {
             const lifeOSData = {
