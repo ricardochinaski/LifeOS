@@ -5,7 +5,8 @@ import {
   FinancialAccount, Transaction, Budget, Debt, Book, ReadingLog, BookNote,
   TabType, QuickCaptureParsed, Priority, TaskStatus, ShiftConfig, ShiftInfo, ShiftType,
   HealthProfile, HealthLog, ReadingGroup, ReadingSession, AppCustomSettings,
-  FinancialGoal, RecurringTransaction, SyncState, SyncCollection
+  FinancialGoal, RecurringTransaction, SyncState, SyncCollection,
+  WorkoutLog, WorkoutType
 } from '../types';
 import {
   initialAreas, initialProjects, initialTasks, initialHabits,
@@ -67,11 +68,14 @@ interface LifeOSContextType {
   readingSessions: ReadingSession[];
   healthProfile: HealthProfile;
   healthLogs: HealthLog[];
+  workoutLogs: WorkoutLog[];
 
   // Health Actions
   updateHealthProfile: (partial: Partial<HealthProfile>) => void;
   addHealthLog: (log: Omit<HealthLog, 'id'>) => void;
   deleteHealthLog: (id: string) => void;
+  addWorkoutLog: (log: Omit<WorkoutLog, 'id'>) => void;
+  deleteWorkoutLog: (id: string) => void;
 
   // Quick Capture & UI
   isQuickCaptureOpen: boolean;
@@ -192,7 +196,7 @@ const col = (uid: string, sub: string) => collection(db, 'users', uid, sub);
 const docRef = (uid: string, sub: string, id: string) => doc(db, 'users', uid, sub, id);
 
 // List of collection names to migrate/load
-const COLLECTIONS = ['tasks', 'habits', 'habitLogs', 'accounts', 'budgets', 'debts', 'transactions', 'financialGoals', 'recurringTransactions', 'books', 'readingLogs', 'bookNotes', 'readingGroups', 'readingSessions', 'projects', 'healthLogs'] as const;
+const COLLECTIONS = ['tasks', 'habits', 'habitLogs', 'accounts', 'budgets', 'debts', 'transactions', 'financialGoals', 'recurringTransactions', 'books', 'readingLogs', 'bookNotes', 'readingGroups', 'readingSessions', 'projects', 'healthLogs', 'workoutLogs'] as const;
 const DEFAULT_SYNC_STATE: SyncState = { tasks: 'idle', habits: 'idle', habitLogs: 'idle', finances: 'idle', library: 'idle', health: 'idle', projects: 'idle', settings: 'idle' };
 
 const curatedTasks = initialTasks.filter((task) => task.id.startsWith('task_home_') || task.id.startsWith('task_personal_') || task.id.startsWith('task_finance_subscription_'));
@@ -257,6 +261,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [readingSessions, setReadingSessions] = useState<ReadingSession[]>([]);
   const [healthProfile, setHealthProfile] = useState<HealthProfile>(initialHealthProfile);
   const [healthLogs, setHealthLogs] = useState<HealthLog[]>(initialHealthLogs);
+  const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [appSettings, setAppSettings] = useState<AppCustomSettings>(initialAppSettings);
 
   // Auth & Cloud Sync State
@@ -584,6 +589,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       for (const n of bookNotes) allWrites.push(writeToFirestore(uid, 'bookNotes', n.id, n));
       for (const p of projects) allWrites.push(writeToFirestore(uid, 'projects', p.id, p));
       for (const l of healthLogs) allWrites.push(writeToFirestore(uid, 'healthLogs', l.id, l));
+      for (const w of workoutLogs) allWrites.push(writeToFirestore(uid, 'workoutLogs', w.id, w));
       allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'shift'), removeUndefinedFields(shiftConfig)));
       allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), removeUndefinedFields(healthProfile)));
       allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'appSettings'), removeUndefinedFields(appSettings)));
@@ -1364,6 +1370,19 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     showToast('Registro de salud eliminado.');
   };
 
+  const addWorkoutLog = (logData: Omit<WorkoutLog, 'id'>) => {
+    const newLog: WorkoutLog = { ...logData, id: `wlog_${Date.now()}` };
+    setWorkoutLogs((prev) => [newLog, ...prev]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'workoutLogs', newLog.id, newLog);
+    showToast('Entrenamiento registrado.');
+  };
+
+  const deleteWorkoutLog = (id: string) => {
+    setWorkoutLogs((prev) => prev.filter((l) => l.id !== id));
+    if (currentUser) deleteFromFirestore(currentUser.uid, 'workoutLogs', id);
+    showToast('Entrenamiento eliminado.');
+  };
+
   // Data Export / Reset
   const exportDataJSON = () => {
     const fullData = {
@@ -1371,7 +1390,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       exportedAt: new Date().toISOString(),
       tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions,
       books, readingLogs, bookNotes, readingGroups, readingSessions, projects,
-      shiftConfig, healthProfile, healthLogs, appSettings,
+      shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings,
     };
     const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1407,6 +1426,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setReadingSessions(current => mergeById(current, data.readingSessions));
     setProjects(current => mergeById(current, data.projects));
     setHealthLogs(current => mergeById(current, data.healthLogs));
+    setWorkoutLogs(current => mergeById(current, data.workoutLogs));
     if (data.shiftConfig && typeof data.shiftConfig === 'object') setShiftConfig(data.shiftConfig as ShiftConfig);
     if (data.healthProfile && typeof data.healthProfile === 'object') setHealthProfile(data.healthProfile as HealthProfile);
     if (data.appSettings && typeof data.appSettings === 'object') setAppSettings(current => ({ ...current, ...(data.appSettings as AppCustomSettings) }));
@@ -1432,6 +1452,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setProjects(initialProjects);
       setHealthProfile(initialHealthProfile);
       setHealthLogs(initialHealthLogs);
+      setWorkoutLogs([]);
       setShiftConfig(DEFAULT_SHIFT_CONFIG);
       setAppSettings(initialAppSettings);
       localStorage.removeItem(STORAGE_KEY);
@@ -1461,7 +1482,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         shiftConfig, shiftInfo, isShiftCalibrationOpen, openShiftCalibration, closeShiftCalibration,
         calibrateShift, updateShiftConfig,
         areas, projects, tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions,
-        books, readingLogs, bookNotes, healthProfile, healthLogs,
+        books, readingLogs, bookNotes, healthProfile, healthLogs, workoutLogs,
         updateHealthProfile, addHealthLog, deleteHealthLog,
         isQuickCaptureOpen, openQuickCapture, closeQuickCapture,
         isAICopilotOpen, openAICopilot, closeAICopilot,
@@ -1477,6 +1498,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         addFinancialGoal, updateFinancialGoal, deleteFinancialGoal,
         addRecurringTransaction, updateRecurringTransaction, deleteRecurringTransaction,
         addBook, updateBookProgress, updateBookStatus, addBookNote,
+        addWorkoutLog, deleteWorkoutLog,
         exportDataJSON, importDataJSON, resetToDefaults,
         toastMessage, showToast,
         isCalendarModalOpen, openCalendarModal, closeCalendarModal,

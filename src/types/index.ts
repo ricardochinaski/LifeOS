@@ -324,6 +324,15 @@ export interface WorkoutExercise {
   description: string;
 }
 
+export interface WorkoutExercise {
+  name: string;
+  sets: number;
+  reps: string;
+  restSeconds: number;
+  targetMuscle: string;
+  description: string;
+}
+
 export interface WorkoutRoutineAI {
   id?: string;
   date?: string;
@@ -336,6 +345,27 @@ export interface WorkoutRoutineAI {
   equipment?: string;
   durationMinutes?: number;
   focusGoal?: string;
+}
+
+export type WorkoutType = 'strength' | 'cardio' | 'hiit' | 'yoga' | 'mobility' | 'sports' | 'other';
+
+export interface WorkoutLog {
+  id: string;
+  date: string;
+  time?: string;
+  type: WorkoutType;
+  durationMinutes: number;
+  exercises: {
+    name: string;
+    sets: number;
+    reps: string;
+    weightKg?: number;
+    restSeconds?: number;
+    rpe?: number;
+  }[];
+  caloriesBurned?: number;
+  notes?: string;
+  locationContext?: 'rest_home' | 'mine_camp' | 'transit';
 }
 
 export interface QuickCaptureParsed {
