@@ -75,6 +75,7 @@ export const TasksView: React.FC = () => {
   const [expandedSubtasks, setExpandedSubtasks] = useState<Set<string>>(new Set());
   const [newSubtaskInput, setNewSubtaskInput] = useState<Record<string, string>>({});
   const [newSubtaskEditInput, setNewSubtaskEditInput] = useState<Record<string, string>>({});
+  const [editingSubtask, setEditingSubtask] = useState<{ taskId: string; subtaskId: string; value: string } | null>(null);
 
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
@@ -151,6 +152,26 @@ export const TasksView: React.FC = () => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
     updateTask({ ...task, subtasks: task.subtasks.filter((st) => st.id !== subtaskId) });
+  };
+
+  const startEditSubtask = (taskId: string, subtaskId: string, currentTitle: string) => {
+    setEditingSubtask({ taskId, subtaskId, value: currentTitle });
+    setEditingTask(null); // Close task edit modal if open
+  };
+
+  const saveEditSubtask = (taskId: string, subtaskId: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const updatedSubtasks = task.subtasks.map((st) =>
+      st.id === subtaskId ? { ...st, title: newTitle.trim() } : st
+    );
+    updateTask({ ...task, subtasks: updatedSubtasks });
+    setEditingSubtask(null);
+  };
+
+  const cancelEditSubtask = () => {
+    setEditingSubtask(null);
   };
 
   const filteredAndSortedTasks = useMemo(() => {
@@ -325,15 +346,48 @@ export const TasksView: React.FC = () => {
                 </button>
                 {isExpanded && (
                   <div className="pt-2 space-y-1 pl-1">
-                    {t.subtasks.map((st) => (
-                      <div key={st.id} className="flex items-center gap-2 group">
-                        <button onClick={() => toggleSubtask(t.id, st.id)} className={`shrink-0 ${st.completed ? 'text-emerald-500' : 'text-slate-400 hover:text-amber-500'}`}>
-                          {st.completed ? <CheckCircle2 className="w-3.5 h-3.5 fill-emerald-500 text-white" /> : <Circle className="w-3.5 h-3.5" />}
-                        </button>
-                        <span className={`text-[11px] ${st.completed ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>{st.title}</span>
-                        <button onClick={() => removeSubtask(t.id, st.id)} className="ml-auto opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"><X className="w-3 h-3" /></button>
-                      </div>
-                    ))}
+{t.subtasks.map((st) => {
+                      const isEditing = editingSubtask?.taskId === t.id && editingSubtask?.subtaskId === st.id;
+                      if (isEditing) {
+                        return (
+                          <div key={st.id} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editingSubtask.value}
+                              onChange={(e) => setEditingSubtask({ ...editingSubtask!, value: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveEditSubtask(t.id, st.id, editingSubtask.value);
+                                if (e.key === 'Escape') cancelEditSubtask();
+                              }}
+                              autoFocus
+                              className="flex-1 p-1.5 text-[11px] rounded-lg border border-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                            <button onClick={() => saveEditSubtask(t.id, st.id, editingSubtask.value)} className="p-1.5 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950" title="Guardar">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={cancelEditSubtask} className="p-1.5 rounded text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Cancelar">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={st.id} className="flex items-center gap-2 group">
+                          <button onClick={() => toggleSubtask(t.id, st.id)} className={`shrink-0 ${st.completed ? 'text-emerald-500' : 'text-slate-400 hover:text-amber-500'}`}>
+                            {st.completed ? <CheckCircle2 className="w-3.5 h-3.5 fill-emerald-500 text-white" /> : <Circle className="w-3.5 h-3.5" />}
+                          </button>
+                          <span className={`text-[11px] ${st.completed ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>{st.title}</span>
+                          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => startEditSubtask(t.id, st.id, st.title)} className="p-1 rounded text-slate-400 hover:text-amber-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Editar subtarea">
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => removeSubtask(t.id, st.id)} className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Eliminar">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                     <div className="flex items-center gap-1 pt-1">
                       <input type="text" value={newSubtaskEditInput[t.id] || ''} onChange={(e) => setNewSubtaskEditInput((prev) => ({ ...prev, [t.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Enter') { setNewSubtaskInput((prev) => ({ ...prev, [t.id]: newSubtaskEditInput[t.id] || '' })); addSubtask(t.id); } }} placeholder="+ Subtarea" className="flex-1 p-1 text-[10px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
                       <button onClick={() => { setNewSubtaskInput((prev) => ({ ...prev, [t.id]: newSubtaskEditInput[t.id] || '' })); addSubtask(t.id); }} className="p-1 rounded text-[10px] text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 font-bold">+</button>
