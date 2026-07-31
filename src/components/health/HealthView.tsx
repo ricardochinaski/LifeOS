@@ -60,6 +60,107 @@ export const HealthView: React.FC = () => {
   const [newWorkoutNotes, setNewWorkoutNotes] = useState<string>('');
   const [newWorkoutLocation, setNewWorkoutLocation] = useState<'rest_home' | 'mine_camp' | 'transit'>('rest_home');
 
+  // Predefined Calisthenics Routines
+  const CALISTHENICS_ROUTINES = {
+    'full-body-basico': {
+      name: 'Full Body Básico (Principiante)',
+      type: 'strength' as WorkoutType,
+      duration: 30,
+      exercises: [
+        { name: 'Flexiones de pecho (knee push-ups si necesario)', sets: 3, reps: '8-12', weightKg: undefined },
+        { name: 'Sentadillas con peso corporal', sets: 3, reps: '15-20', weightKg: undefined },
+        { name: 'Plancha abdominal', sets: 3, reps: '30-45 seg', weightKg: undefined },
+        { name: 'Fondos en banco/silla (tríceps)', sets: 3, reps: '10-15', weightKg: undefined },
+        { name: 'Zancadas alternadas', sets: 3, reps: '10-12 c/pierna', weightKg: undefined },
+        { name: 'Superman (espalda baja)', sets: 3, reps: '12-15', weightKg: undefined },
+      ],
+    },
+    'push-pull-legs': {
+      name: 'Push / Pull / Legs (Intermedio)',
+      type: 'strength' as WorkoutType,
+      duration: 45,
+      exercises: [
+        { name: 'Flexiones diamante (push)', sets: 4, reps: '8-12', weightKg: undefined },
+        { name: 'Flexiones arqueras (push)', sets: 3, reps: '6-8 c/lado', weightKg: undefined },
+        { name: 'Dominadas / Australian pull-ups (pull)', sets: 4, reps: '8-12', weightKg: undefined },
+        { name: 'Face pulls con banda / TRX (pull)', sets: 3, reps: '12-15', weightKg: undefined },
+        { name: 'Pistol squats asistidas / Bulgarias (legs)', sets: 3, reps: '8-10 c/pierna', weightKg: undefined },
+        { name: 'Elevación de talones (legs)', sets: 4, reps: '15-20', weightKg: undefined },
+        { name: 'Plancha con toque de hombro (core)', sets: 3, reps: '20 toques', weightKg: undefined },
+      ],
+    },
+    'upper-body-fuerza': {
+      name: 'Upper Body Fuerza (Avanzado)',
+      type: 'strength' as WorkoutType,
+      duration: 50,
+      exercises: [
+        { name: 'Dominadas estrictas', sets: 5, reps: '5-8', weightKg: undefined },
+        { name: 'Flexiones con palmada / pliométricas', sets: 4, reps: '6-10', weightKg: undefined },
+        { name: 'Muscle-up progresión / Transición', sets: 4, reps: '3-5', weightKg: undefined },
+        { name: 'Fondos en paralelas (dips)', sets: 4, reps: '8-12', weightKg: undefined },
+        { name: 'Flexiones pike / HSPU progresión', sets: 3, reps: '5-8', weightKg: undefined },
+        { name: 'Australian pull-ups ancha', sets: 3, reps: '10-12', weightKg: undefined },
+        { name: 'Plancha a flexión (walkouts)', sets: 3, reps: '8-10', weightKg: undefined },
+      ],
+    },
+    'core-calistenia': {
+      name: 'Core & Movilidad Calisténica',
+      type: 'mobility' as WorkoutType,
+      duration: 20,
+      exercises: [
+        { name: 'Plancha frontal', sets: 3, reps: '45-60 seg', weightKg: undefined },
+        { name: 'Plancha lateral (c/lado)', sets: 3, reps: '30-45 seg', weightKg: undefined },
+        { name: 'Dead bug', sets: 3, reps: '12-15', weightKg: undefined },
+        { name: 'Bird dog', sets: 3, reps: '10-12 c/lado', weightKg: undefined },
+        { name: 'Hollow body hold', sets: 3, reps: '30-45 seg', weightKg: undefined },
+        { name: 'Toes to bar / Rodillas al pecho en barra', sets: 3, reps: '8-12', weightKg: undefined },
+        { name: 'Estiramiento gato-vaca + movilidad torácica', sets: 2, reps: '10 ciclos', weightKg: undefined },
+      ],
+    },
+    'hiit-calistenia': {
+      name: 'HIIT Calisténico (Quema Grasa)',
+      type: 'hiit' as WorkoutType,
+      duration: 20,
+      exercises: [
+        { name: 'Burpees', sets: 4, reps: '40 seg trabajo / 20 seg descanso', weightKg: undefined },
+        { name: 'Mountain climbers', sets: 4, reps: '40 seg / 20 seg', weightKg: undefined },
+        { name: 'Jumping squats', sets: 4, reps: '40 seg / 20 seg', weightKg: undefined },
+        { name: 'Flexiones explosivas', sets: 4, reps: '40 seg / 20 seg', weightKg: undefined },
+        { name: 'Plancha con saltos (plank jacks)', sets: 4, reps: '40 seg / 20 seg', weightKg: undefined },
+      ],
+    },
+    'skill-work': {
+      name: 'Skill Work: Planche / Front Lever / Handstand',
+      type: 'strength' as WorkoutType,
+      duration: 60,
+      exercises: [
+        { name: 'Planche leans / Tuck planche holds', sets: 4, reps: '10-15 seg', weightKg: undefined },
+        { name: 'Front lever tuck / Advanced tuck holds', sets: 4, reps: '10-15 seg', weightKg: undefined },
+        { name: 'Handstand wall holds / Kick-ups', sets: 5, reps: '20-30 seg', weightKg: undefined },
+        { name: 'L-sit / V-sit progresión', sets: 3, reps: '15-20 seg', weightKg: undefined },
+        { name: 'Pseudo planche push-ups', sets: 3, reps: '5-8', weightKg: undefined },
+        { name: 'Dragon flag / Dragon press', sets: 3, reps: '5-8', weightKg: undefined },
+        { name: 'Wrist prep & movilidad muñecas', sets: 2, reps: '2 min', weightKg: undefined },
+      ],
+    },
+    'faena-express': {
+      name: 'Faena Express (15 min, sin equipamiento)',
+      type: 'strength' as WorkoutType,
+      duration: 15,
+      exercises: [
+        { name: 'Flexiones estándar', sets: 3, reps: 'AMRAP', weightKg: undefined },
+        { name: 'Sentadillas salto', sets: 3, reps: 'AMRAP 40 seg', weightKg: undefined },
+        { name: 'Plancha', sets: 3, reps: '45 seg', weightKg: undefined },
+        { name: 'Fondos en cama/literas', sets: 3, reps: 'AMRAP', weightKg: undefined },
+        { name: 'Mountain climbers', sets: 3, reps: '40 seg', weightKg: undefined },
+      ],
+    },
+  } as const;
+
+  type RoutineKey = keyof typeof CALISTHENICS_ROUTINES;
+
+  const [selectedRoutine, setSelectedRoutine] = useState<RoutineKey | 'custom'>('custom');
+
   // Calculate BMI
   const heightInMeters = healthProfile.heightCm / 100;
   const bmi = heightInMeters > 0 ? (healthProfile.weightKg / (heightInMeters * heightInMeters)).toFixed(1) : '0';
@@ -189,6 +290,19 @@ export const HealthView: React.FC = () => {
 
   const updateExercise = (index: number, field: string, value: string | number) => {
     setNewWorkoutExercises(prev => prev.map((ex, i) => i === index ? { ...ex, [field]: value } : ex));
+  };
+
+  const applyRoutine = (key: RoutineKey) => {
+    const routine = CALISTHENICS_ROUTINES[key];
+    setSelectedRoutine(key);
+    setNewWorkoutType(routine.type);
+    setNewWorkoutDuration(routine.duration);
+    setNewWorkoutExercises(routine.exercises.map(ex => ({ ...ex })));
+  };
+
+  const clearRoutine = () => {
+    setSelectedRoutine('custom');
+    setNewWorkoutExercises([{ name: '', sets: 3, reps: '10-12', weightKg: undefined }]);
   };
 
   return (
@@ -594,6 +708,37 @@ export const HealthView: React.FC = () => {
                   <option value="mine_camp">⛏️ Campamento Minero</option>
                   <option value="transit">🚌 En Tránsito</option>
                 </select>
+              </div>
+
+              <div className="border-t border-slate-800 pt-3">
+                <label className="text-xs font-bold text-slate-300">Rutina Calisténica Predefinida</label>
+                <select
+                  value={selectedRoutine}
+                  onChange={(e) => { const val = e.target.value as RoutineKey | 'custom'; if (val === 'custom') clearRoutine(); else applyRoutine(val); }}
+                  className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white"
+                >
+                  <option value="custom">✏️ Personalizada (vacío)</option>
+                  <optgroup label="🏋️ Fuerza / Hipertrofia">
+                    <option value="full-body-basico">Full Body Básico (30 min, Principiante)</option>
+                    <option value="push-pull-legs">Push / Pull / Legs (45 min, Intermedio)</option>
+                    <option value="upper-body-fuerza">Upper Body Fuerza (50 min, Avanzado)</option>
+                    <option value="faena-express">Faena Express (15 min, Sin equipamiento)</option>
+                  </optgroup>
+                  <optgroup label="🔥 HIIT / Quema Grasa">
+                    <option value="hiit-calistenia">HIIT Calisténico (20 min)</option>
+                  </optgroup>
+                  <optgroup label="🤸 Movilidad / Core">
+                    <option value="core-calistenia">Core & Movilidad (20 min)</option>
+                  </optgroup>
+                  <optgroup label="🎯 Skill Work (Avanzado)">
+                    <option value="skill-work">Planche / Front Lever / Handstand (60 min)</option>
+                  </optgroup>
+                </select>
+                {selectedRoutine !== 'custom' && (
+                  <p className="mt-1 text-[10px] text-emerald-400">
+                    Cargada: {CALISTHENICS_ROUTINES[selectedRoutine].name} — {CALISTHENICS_ROUTINES[selectedRoutine].exercises.length} ejercicios, ~{CALISTHENICS_ROUTINES[selectedRoutine].duration} min
+                  </p>
+                )}
               </div>
 
               <div className="border-t border-slate-800 pt-3">
