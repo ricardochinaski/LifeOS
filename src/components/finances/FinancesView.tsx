@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
-import { FinancialAccount, Transaction, Budget, Debt, TransactionType, FinancialGoal, RecurringTransaction } from '../../types';
+import { FinancialAccount, Transaction, Budget, Debt, TransactionType, FinancialGoal, RecurringTransaction, RecurringServiceType } from '../../types';
 import {
   PieChart as PieChartIcon,
   Wallet,
@@ -28,7 +28,7 @@ import {
   ArrowLeftRight,
   AlertTriangle,
   FolderKanban,
-  ListChecks, Goal, Repeat2
+  ListChecks, Goal, Repeat2, Smartphone, Clapperboard, Cloud, Dumbbell, Shield, AppWindow
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -152,6 +152,9 @@ export const FinancesView: React.FC = () => {
   const [recurringCategory, setRecurringCategory] = useState('Vivienda & Servicios');
   const [recurringType, setRecurringType] = useState<TransactionType>('expense');
   const [recurringFrequency, setRecurringFrequency] = useState<'weekly' | 'monthly'>('monthly');
+  const [recurringServiceType, setRecurringServiceType] = useState<RecurringServiceType>('streaming');
+  const [recurringBillingDay, setRecurringBillingDay] = useState('5');
+  const [recurringAccountId, setRecurringAccountId] = useState(accounts[0]?.id || '');
 
   const todayStr = new Date().toISOString().split('T')[0];
   const currentMonthStr = todayStr.substring(0, 7);
@@ -375,8 +378,27 @@ export const FinancesView: React.FC = () => {
     e.preventDefault();
     const amount = Number(recurringAmount);
     if (!recurringDescription.trim() || amount <= 0 || !accounts[0]) return;
-    addRecurringTransaction({ type: recurringType, amount, category: recurringCategory, description: recurringDescription, accountId: accounts[0].id, frequency: recurringFrequency, nextDate: todayStr, active: true });
+    const billingDay = parseInt(recurringBillingDay);
+    addRecurringTransaction({
+      type: recurringType,
+      amount,
+      category: recurringCategory,
+      description: recurringDescription,
+      accountId: recurringAccountId || accounts[0].id,
+      frequency: recurringFrequency,
+      nextDate: todayStr,
+      active: true,
+      serviceType: recurringServiceType,
+      billingDay: !isNaN(billingDay) && billingDay >= 1 && billingDay <= 31 ? billingDay : undefined,
+    });
     setRecurringDescription(''); setRecurringAmount(''); setIsRecurringFormOpen(false);
+  };
+
+  const handlePresetClick = (preset: { name: string; type: RecurringServiceType }) => {
+    setRecurringDescription(preset.name);
+    setRecurringServiceType(preset.type);
+    setRecurringType('expense');
+    setRecurringFrequency('monthly');
   };
 
   // Debt Handlers
@@ -488,6 +510,65 @@ export const FinancesView: React.FC = () => {
     }
   };
 
+  const SERVICE_TYPES: { id: RecurringServiceType; label: string }[] = [
+    { id: 'phone', label: 'Telefonía / Plan Celular' },
+    { id: 'streaming', label: 'Streaming (Netflix, Spotify...)' },
+    { id: 'software', label: 'Software & Apps' },
+    { id: 'cloud', label: 'Cloud & Almacenamiento' },
+    { id: 'gym', label: 'Gimnasio & Deporte' },
+    { id: 'insurance', label: 'Seguros' },
+    { id: 'other', label: 'Otros Servicios' },
+  ];
+
+  const SUBSCRIPTION_PRESETS: { name: string; type: RecurringServiceType }[] = [
+    { name: 'Netflix', type: 'streaming' },
+    { name: 'Spotify', type: 'streaming' },
+    { name: 'Disney+', type: 'streaming' },
+    { name: 'Max (HBO)', type: 'streaming' },
+    { name: 'Prime Video', type: 'streaming' },
+    { name: 'YouTube Premium', type: 'streaming' },
+    { name: 'Google One', type: 'cloud' },
+    { name: 'iCloud+', type: 'cloud' },
+    { name: 'Entel', type: 'phone' },
+    { name: 'Movistar', type: 'phone' },
+    { name: 'WOM', type: 'phone' },
+    { name: 'Gimnasio', type: 'gym' },
+  ];
+
+  const monthlySubscriptionsTotal = recurringTransactions
+    .filter(r => r.active && r.frequency === 'monthly' && r.type === 'expense')
+    .reduce((s, r) => s + r.amount, 0);
+
+  const getServiceIcon = (type?: RecurringServiceType) => {
+    switch (type) {
+      case 'phone': return <Smartphone className="w-4 h-4 text-emerald-400" />;
+      case 'streaming': return <Clapperboard className="w-4 h-4 text-rose-400" />;
+      case 'software': return <AppWindow className="w-4 h-4 text-sky-400" />;
+      case 'cloud': return <Cloud className="w-4 h-4 text-indigo-400" />;
+      case 'gym': return <Dumbbell className="w-4 h-4 text-amber-400" />;
+      case 'insurance': return <Shield className="w-4 h-4 text-violet-400" />;
+      default: return <Repeat2 className="w-4 h-4 text-slate-400" />;
+    }
+  };
+
+  const getNextBillingLabel = (day?: number) => {
+    if (!day || day < 1 || day > 31) return null;
+    const now = new Date();
+    const lastOfMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+    let d = new Date(now.getFullYear(), now.getMonth(), Math.min(day, lastOfMonth(now.getFullYear(), now.getMonth())));
+    if (d <= now) {
+      const nextM = now.getMonth() + 1;
+      const y = nextM > 11 ? now.getFullYear() + 1 : now.getFullYear();
+      const m = nextM % 12;
+      d = new Date(y, m, Math.min(day, lastOfMonth(y, m)));
+    }
+    return d.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
+  };
+
+  const getServiceTypeLabel = (type?: RecurringServiceType) => {
+    return SERVICE_TYPES.find(s => s.id === type)?.label || 'Otro';
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))] animate-fade-in">
       {/* Top Header */}
@@ -580,9 +661,103 @@ export const FinancesView: React.FC = () => {
           <div className="mt-4 space-y-3">{financialGoals.map(goal => { const pct = Math.min(100, Math.round(goal.currentAmount / goal.targetAmount * 100)); return <div key={goal.id} className="rounded-2xl bg-slate-800/60 p-3"><div className="flex justify-between gap-3 text-xs"><span className="font-bold text-white">{goal.name}</span><button onClick={() => deleteFinancialGoal(goal.id)} className="text-slate-500 hover:text-rose-400">Eliminar</button></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-950"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div><div className="mt-1 flex justify-between text-[10px] text-slate-400"><span>{formatCLP(goal.currentAmount)} de {formatCLP(goal.targetAmount)}</span><span>{goal.targetDate || `${pct}%`}</span></div></div> })}{financialGoals.length === 0 && <p className="py-5 text-center text-xs text-slate-500">Crea tu primera meta para darle destino a tu ahorro.</p>}</div>
         </section>
         <section className="p-5 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl">
-          <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Repeat2 className="w-5 h-5 text-sky-400" /><div><h3 className="text-sm font-extrabold text-white">Flujo recurrente</h3><p className="text-[10px] text-slate-400">Base para proyectar tu mes</p></div></div><button onClick={() => setIsRecurringFormOpen(!isRecurringFormOpen)} className="text-xs font-bold text-sky-400">+ Recurrente</button></div>
-          {isRecurringFormOpen && <form onSubmit={handleSaveRecurring} className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-2xl bg-slate-800/70 p-3"><input value={recurringDescription} onChange={e => setRecurringDescription(e.target.value)} placeholder="Ej: Arriendo" className="rounded-xl bg-slate-900 p-2 text-xs text-white" required /><input type="number" value={recurringAmount} onChange={e => setRecurringAmount(e.target.value)} placeholder="Monto CLP" className="rounded-xl bg-slate-900 p-2 text-xs text-white" required /><select value={recurringType} onChange={e => setRecurringType(e.target.value as TransactionType)} className="rounded-xl bg-slate-900 p-2 text-xs text-white"><option value="expense">Gasto</option><option value="income">Ingreso</option></select><select value={recurringFrequency} onChange={e => setRecurringFrequency(e.target.value as 'weekly' | 'monthly')} className="rounded-xl bg-slate-900 p-2 text-xs text-white"><option value="monthly">Mensual</option><option value="weekly">Semanal</option></select><button className="rounded-xl bg-sky-500 p-2 text-xs font-black text-slate-950">Guardar movimiento</button></form>}
-          <div className="mt-4 space-y-2">{recurringTransactions.map(item => <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-800/60 p-3 text-xs"><div><p className="font-bold text-white">{item.description}</p><p className="text-[10px] text-slate-400">{item.frequency === 'monthly' ? 'Mensual' : 'Semanal'} · Próximo: {item.nextDate}</p></div><div className="flex items-center gap-2"><span className={item.type === 'income' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400'}>{item.type === 'income' ? '+' : '-'}{formatCLP(item.amount)}</span><button onClick={() => updateRecurringTransaction({ ...item, active: !item.active })} className="text-[10px] text-slate-400">{item.active ? 'Pausar' : 'Activar'}</button><button onClick={() => deleteRecurringTransaction(item.id)} className="text-slate-500 hover:text-rose-400">×</button></div></div>)}{recurringTransactions.length === 0 && <p className="py-5 text-center text-xs text-slate-500">Agrega arriendo, sueldo o suscripciones para anticipar tu flujo.</p>}</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Repeat2 className="w-5 h-5 text-sky-400" />
+              <div>
+                <h3 className="text-sm font-extrabold text-white">Mensualidades & Suscripciones</h3>
+                <p className="text-[10px] text-slate-400">Cuenta del teléfono, streaming y servicios fijos</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-full bg-sky-500/15 border border-sky-500/30 text-[10px] font-bold text-sky-300">
+                {formatCLP(monthlySubscriptionsTotal)}/mes
+              </span>
+              <button onClick={() => setIsRecurringFormOpen(!isRecurringFormOpen)} className="text-xs font-bold text-sky-400 hover:text-sky-300 cursor-pointer">+ Mensualidad</button>
+            </div>
+          </div>
+
+          {isRecurringFormOpen && (
+            <form onSubmit={handleSaveRecurring} className="mt-4 space-y-3 rounded-2xl bg-slate-800/70 p-3 border border-slate-700/60">
+              <div className="flex flex-wrap gap-1.5">
+                {SUBSCRIPTION_PRESETS.map(preset => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => handlePresetClick(preset)}
+                    className="px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-[10px] font-bold text-slate-300 hover:border-sky-500 hover:text-sky-300 transition-colors cursor-pointer"
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input value={recurringDescription} onChange={e => setRecurringDescription(e.target.value)} placeholder="Ej: Cuenta Entel, Netflix, Google One" className="rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" required />
+                <div className="flex gap-2">
+                  <input type="number" min="1" value={recurringAmount} onChange={e => setRecurringAmount(e.target.value)} placeholder="Monto CLP" className="w-full rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" required />
+                  <div className="flex items-center gap-1 px-2 rounded-xl bg-slate-900 border border-slate-700">
+                    <CalendarDays className="w-3.5 h-3.5 text-sky-400" />
+                    <input type="number" min="1" max="31" value={recurringBillingDay} onChange={e => setRecurringBillingDay(e.target.value)} placeholder="Día" title="Día de cobro" className="w-12 bg-transparent p-2 text-xs text-white focus:outline-none" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <select value={recurringServiceType} onChange={e => setRecurringServiceType(e.target.value as RecurringServiceType)} className="rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                  {SERVICE_TYPES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+                <select value={recurringAccountId} onChange={e => setRecurringAccountId(e.target.value)} className="rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                  <option value="">Cuenta de pago...</option>
+                  {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                </select>
+              </div>
+
+              <div className="flex gap-2">
+                <select value={recurringType} onChange={e => setRecurringType(e.target.value as TransactionType)} className="rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                  <option value="expense">Gasto</option>
+                  <option value="income">Ingreso</option>
+                </select>
+                <select value={recurringFrequency} onChange={e => setRecurringFrequency(e.target.value as 'weekly' | 'monthly')} className="rounded-xl bg-slate-900 p-2 text-xs text-white border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                  <option value="monthly">Mensual</option>
+                  <option value="weekly">Semanal</option>
+                </select>
+                <button className="flex-1 rounded-xl bg-sky-500 hover:bg-sky-400 p-2 text-xs font-black text-slate-950 transition-colors cursor-pointer">Guardar mensualidad</button>
+              </div>
+            </form>
+          )}
+
+          <div className="mt-4 space-y-2">
+            {recurringTransactions.map(item => {
+              const nextBilling = getNextBillingLabel(item.billingDay);
+              return (
+                <div key={item.id} className="flex items-center justify-between gap-2 rounded-2xl bg-slate-800/60 p-3 text-xs border border-slate-700/50">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-2 rounded-lg bg-slate-900 border border-slate-700 shrink-0">
+                      {getServiceIcon(item.serviceType)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-white truncate">{item.description}</p>
+                      <p className="text-[10px] text-slate-400 flex items-center gap-1 flex-wrap">
+                        {item.serviceType ? getServiceTypeLabel(item.serviceType) : (item.frequency === 'monthly' ? 'Mensual' : 'Semanal')}
+                        {item.billingDay != null && <span className="flex items-center gap-0.5 text-sky-400"><CalendarDays className="w-3 h-3" />Cobra el {item.billingDay}</span>}
+                        {!item.serviceType && <> · Próximo: {item.nextDate}</>}
+                        {nextBilling && <span className="text-slate-500">· Próximo cobro: {nextBilling}</span>}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={item.type === 'income' ? 'font-bold text-emerald-400 font-mono' : 'font-bold text-rose-400 font-mono'}>
+                      {item.type === 'income' ? '+' : '-'}{formatCLP(item.amount)}
+                    </span>
+                    <button onClick={() => updateRecurringTransaction({ ...item, active: !item.active })} className={`text-[10px] px-2 py-1 rounded-lg border transition-colors cursor-pointer ${item.active ? 'text-slate-300 border-slate-700 hover:border-amber-500 hover:text-amber-400' : 'text-emerald-400 border-emerald-500/40'}`}>{item.active ? 'Pausar' : 'Activa'}</button>
+                    <button onClick={() => deleteRecurringTransaction(item.id)} className="text-slate-500 hover:text-rose-400 cursor-pointer">×</button>
+                  </div>
+                </div>
+              );
+            })}
+            {recurringTransactions.length === 0 && <p className="py-5 text-center text-xs text-slate-500">Agrega tu plan de teléfono, Netflix, Spotify o Google One para proyectar tu flujo mensual.</p>}
+          </div>
         </section>
       </div>
 

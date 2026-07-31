@@ -176,6 +176,8 @@ export interface FinancialGoal {
   createdAt: string;
 }
 
+export type RecurringServiceType = 'phone' | 'streaming' | 'software' | 'cloud' | 'gym' | 'insurance' | 'other';
+
 export interface RecurringTransaction {
   id: string;
   type: TransactionType;
@@ -186,6 +188,8 @@ export interface RecurringTransaction {
   frequency: 'weekly' | 'monthly';
   nextDate: string;
   active: boolean;
+  serviceType?: RecurringServiceType;
+  billingDay?: number;
 }
 
 export type SyncCollection = 'tasks' | 'habits' | 'habitLogs' | 'finances' | 'library' | 'health' | 'projects' | 'settings';
