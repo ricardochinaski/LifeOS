@@ -70,6 +70,8 @@ export const TasksView: React.FC = () => {
   const [editTaskShift, setEditTaskShift] = useState<'all' | 'rest' | 'work'>('all');
   const [editTaskLinkedHabit, setEditTaskLinkedHabit] = useState<string>('');
   const [editTaskLinkedBook, setEditTaskLinkedBook] = useState<string>('');
+  const [editTaskSubtasks, setEditTaskSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
+  const [newEditSubtask, setNewEditSubtask] = useState('');
 
   const [deleteConfirmTask, setDeleteConfirmTask] = useState<Task | null>(null);
   const [expandedSubtasks, setExpandedSubtasks] = useState<Set<string>>(new Set());
@@ -106,6 +108,8 @@ export const TasksView: React.FC = () => {
     setEditTaskShift(task.shiftContext || 'all');
     setEditTaskLinkedHabit(task.linkedHabitId || '');
     setEditTaskLinkedBook(task.linkedBookId || '');
+    setEditTaskSubtasks(task.subtasks.map(st => ({ ...st })));
+    setNewEditSubtask('');
   };
 
   const handleUpdateTask = (e: React.FormEvent) => {
@@ -124,6 +128,7 @@ export const TasksView: React.FC = () => {
       shiftContext: editTaskShift,
       linkedHabitId: editTaskLinkedHabit || undefined,
       linkedBookId: editTaskLinkedBook || undefined,
+      subtasks: editTaskSubtasks,
     });
     setEditingTask(null);
   };
@@ -821,8 +826,50 @@ export const TasksView: React.FC = () => {
                   </select>
                 </div>
               </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+</div>
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Subtareas</label>
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                  {editTaskSubtasks.map((st, idx) => (
+                    <div key={st.id} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={st.title}
+                        onChange={(e) => setEditTaskSubtasks(prev => prev.map((s, i) => i === idx ? { ...s, title: e.target.value } : s))}
+                        className="flex-1 p-1.5 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEditTaskSubtasks(prev => prev.filter((s, i) => i !== idx))}
+                        className="p-1.5 rounded text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        title="Eliminar subtarea"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {editTaskSubtasks.length === 0 && <p className="text-[10px] text-slate-500 text-center py-2">Sin subtareas</p>}
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={newEditSubtask}
+                    onChange={(e) => setNewEditSubtask(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && newEditSubtask.trim()) { setEditTaskSubtasks(prev => [...prev, { id: `sub_${Date.now()}`, title: newEditSubtask.trim(), completed: false }]); setNewEditSubtask(''); } }}
+                    placeholder="+ Agregar subtarea"
+                    className="flex-1 p-1.5 text-[10px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { if (newEditSubtask.trim()) { setEditTaskSubtasks(prev => [...prev, { id: `sub_${Date.now()}`, title: newEditSubtask.trim(), completed: false }]); setNewEditSubtask(''); } }}
+                    className="p-1.5 rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 font-bold"
+                    disabled={!newEditSubtask.trim()}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button type="button" onClick={() => setEditingTask(null)} className="px-4 py-2 rounded-xl text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Cancelar</button>
               <button type="submit" className="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Guardar Cambios</button>
             </div>
