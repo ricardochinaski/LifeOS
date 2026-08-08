@@ -66,6 +66,12 @@ Para una descripción técnica más detallada, ver [`docs/ARCHITECTURE.md`](./do
 - npm
 - Android Studio + JDK, solo si se trabajará en la aplicación Android
 
+### Gestor de paquetes
+
+**npm es el gestor de paquetes oficial de LifeOS.** `package-lock.json` es el único lockfile que debe versionarse y es la fuente de verdad para instalaciones reproducibles.
+
+Usa `npm ci` para instalaciones limpias/CI y `npm install` cuando necesites modificar dependencias. No generes lockfiles de otros gestores de paquetes en el repositorio.
+
 ### Instalación
 
 ```bash
