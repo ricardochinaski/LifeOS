@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,6 +37,18 @@ jobs:
       - name: Generate patched lockfile
         run: npm audit fix --package-lock-only
 
+      - name: Persist patched lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json already secure"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "fix: patch vulnerable transitive dependencies"
+          git push origin HEAD:${{ github.head_ref }}
+
       - name: Reinstall patched dependency graph
         run: npm ci
 
@@ -46,11 +60,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Export patched lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: patched-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
