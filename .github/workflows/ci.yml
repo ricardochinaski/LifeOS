@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   validate:
-    name: TypeScript, build and dependency audit
+    name: Audit, tests, TypeScript and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -34,6 +34,9 @@ jobs:
 
       - name: Dependency security audit
         run: npm audit --audit-level=high
+
+      - name: Automated tests
+        run: npx --no-install tsx --test tests/**/*.test.ts
 
       - name: TypeScript validation
         run: npm run lint
