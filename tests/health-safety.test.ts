@@ -29,7 +29,7 @@ test('recorded values are displayed without declaring clinical stability', () =>
   assert.match(reply, /85%/);
   assert.match(reply, /150\/95 mmHg/);
   assert.match(reply, /110 BPM/);
-  assert.doesNotMatch(reply, /rango operativo estable|estás estable|normal/i);
+  assert.doesNotMatch(reply, /tus indicadores están en un rango operativo estable|estás clínicamente estable|estás estable/i);
   assert.match(reply, /no determina por sí solo/i);
 });
 
