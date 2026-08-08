@@ -114,6 +114,20 @@ Para preparar web + Capacitor:
 npm run cap:build
 ```
 
+## Integración continua
+
+GitHub Actions ejecuta el workflow `.github/workflows/ci.yml` en cada Pull Request hacia `main` y en cada push a `main`.
+
+El job utiliza Node.js 22 y valida, en este orden:
+
+```bash
+npm ci
+npm run lint
+npm run build
+```
+
+Un Pull Request no debe integrarse si este workflow falla. Las instalaciones de CI deben utilizar `npm ci` y el `package-lock.json` versionado.
+
 ## Variables de entorno
 
 Consulta [`.env.example`](./.env.example).
