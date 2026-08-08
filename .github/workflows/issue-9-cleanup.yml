@@ -1,0 +1,49 @@
+name: Issue 9 cleanup
+
+on:
+  push:
+    branches:
+      - agent/issue-9-normalize-metadata
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Normalize server identifier
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('server.ts')
+          content = path.read_text()
+          content = content.replace("aistudio-build", "LifeOS/0.0.0")
+          path.write_text(content)
+          PY
+
+      - name: Synchronize package lock metadata
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Persist normalization
+        run: |
+          if git diff --quiet -- server.ts package-lock.json; then
+            echo "No normalization changes required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts package-lock.json
+          git commit -m "chore: normalize LifeOS runtime metadata"
+          git push origin HEAD:agent/issue-9-normalize-metadata
