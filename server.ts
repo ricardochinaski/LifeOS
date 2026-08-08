@@ -141,7 +141,7 @@ async function startServer() {
 
       const ai = new GoogleGenAI({
         apiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+        httpOptions: { headers: { 'User-Agent': 'LifeOS/0.0.0' } },
       });
 
       const chronicConditions = Array.isArray(healthProfile?.chronicConditions) && healthProfile.chronicConditions.length > 0
@@ -298,7 +298,7 @@ Devuelve EXCLUSIVAMENTE un JSON con la siguiente estructura:
 
       const ai = new GoogleGenAI({
         apiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+        httpOptions: { headers: { 'User-Agent': 'LifeOS/0.0.0' } },
       });
 
       const systemInstruction = `
@@ -380,7 +380,7 @@ REGLAS DE RESPUESTA:
         try {
           const ai = new GoogleGenAI({
             apiKey,
-            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+            httpOptions: { headers: { 'User-Agent': 'LifeOS/0.0.0' } },
           });
 
           const prompt = `
