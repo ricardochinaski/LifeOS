@@ -7,6 +7,10 @@ coverage/
 .env*
 !.env.example
 
+# Package manager
+bun.lock
+bun.lockb
+
 # Android build outputs
 android/.gradle/
 android/build/
