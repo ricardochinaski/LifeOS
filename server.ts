@@ -4,11 +4,43 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
+import {
+  biometricsContext,
+  formatBloodPressure,
+  formatMetric,
+  formatText,
+  healthFallbackReply,
+  isFiniteNumber,
+} from './server/healthSafety.ts';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function formatProfile(healthProfile: any): string {
+  const weight = formatMetric(healthProfile?.weightKg, ' kg');
+  const height = formatMetric(healthProfile?.heightCm, ' cm');
+  const bmi =
+    isFiniteNumber(healthProfile?.weightKg) &&
+    isFiniteNumber(healthProfile?.heightCm) &&
+    healthProfile.heightCm > 0
+      ? (healthProfile.weightKg / Math.pow(healthProfile.heightCm / 100, 2)).toFixed(1)
+      : 'no disponible';
+
+  return `Peso: ${weight}; Estatura: ${height}; IMC: ${bmi}`;
+}
+
+function formatShift(shiftInfo: any): string {
+  if (!shiftInfo) return 'no disponible';
+
+  const day = isFiniteNumber(shiftInfo.dayInPhase) ? shiftInfo.dayInPhase : 'no disponible';
+  const workDays = isFiniteNumber(shiftInfo.workDays) ? shiftInfo.workDays : 'no disponible';
+  const restDays = isFiniteNumber(shiftInfo.restDays) ? shiftInfo.restDays : 'no disponible';
+  const phase = shiftInfo.phase === 'work' ? 'faena' : shiftInfo.phase === 'rest' ? 'descanso' : 'no disponible';
+
+  return `día ${day}; ciclo ${workDays}x${restDays}; fase ${phase}`;
+}
 
 async function startServer() {
   const app = express();
@@ -16,12 +48,10 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Health API check
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // AI Workout Generator Endpoint
   app.post('/api/ai/workout', async (req, res) => {
     try {
       const apiKey = process.env.GEMINI_API_KEY;
@@ -32,97 +62,114 @@ async function startServer() {
         equipment,
         durationMinutes,
         focusGoal,
-        userPrompt
+        userPrompt,
       } = req.body;
 
+      const altitude = formatMetric(healthProfile?.miningAltitudeMeters, ' m');
+      const healthContext = biometricsContext(latestLog);
+
       if (!apiKey) {
-        // Provide structured fallback AI response if no GEMINI_API_KEY is configured
         return res.json({
-          title: `Rutina ${focusGoal || 'Adaptada'} para Altura (${shiftInfo?.phase === 'work' ? 'Faena' : 'Descanso'})`,
-          summary: `Diseñada según tus métricas: SpO2 ${latestLog?.spO2Pct || 96}%, Presión ${latestLog?.bloodPressureSys || 120}/${latestLog?.bloodPressureDia || 80}, y ubicación en ${healthProfile?.miningAltitudeMeters || 4200}m.`,
+          title: `Rutina ${focusGoal || 'general'} (${shiftInfo?.phase === 'work' ? 'Faena' : shiftInfo?.phase === 'rest' ? 'Descanso' : 'Contexto no informado'})`,
+          summary: `Rutina general sin IA. Altitud registrada: ${altitude}. Los datos de salud ausentes no se reemplazan por valores estimados.`,
           precautions: [
-            'Mantén hidratación constante (mínimo 3.5 Litros de agua en faena).',
-            'Si tu SpO2 baja de 90% o sientes mareos, suspende el ejercicio de inmediato.',
-            'Descansa el doble de tiempo entre series debido a la hipoxia de altitud.'
+            'Ajusta la intensidad a tu condición y detén la actividad si aparecen síntomas inusuales o malestar.',
+            'Mantén hidratación y pausas de acuerdo con tus necesidades y con los protocolos de seguridad de tu lugar de trabajo.',
+            'LifeOS no sustituye una evaluación médica. Si un valor registrado te preocupa o presentas síntomas, utiliza el protocolo de salud correspondiente o consulta a un profesional.',
           ],
           warmup: [
-            { exercise: 'Movilidad articular de hombros y cadera', duration: '3 min', notes: 'Respiración diafragmática profunda' },
-            { exercise: 'Caminata suave o elevación de rodillas', duration: '3 min', notes: 'Sin elevar pulso sobre 120 BPM' }
+            {
+              exercise: 'Movilidad articular de hombros y cadera',
+              duration: '3 min',
+              notes: 'Movimiento suave y controlado',
+            },
+            {
+              exercise: 'Caminata suave o elevación de rodillas',
+              duration: '3 min',
+              notes: 'Mantén una intensidad cómoda y detente si aparece malestar',
+            },
           ],
           exercises: [
             {
-              name: 'Sentadillas con autocarga (o mancuerna ligera)',
+              name: 'Sentadillas con autocarga',
               sets: 3,
-              reps: '10-12',
+              reps: '8-12',
               restSeconds: 90,
-              targetMuscle: 'Cuádriceps y Glúteos',
-              description: 'Ejecuta con ritmo controlado de 3 segundos al bajar.'
+              targetMuscle: 'Cuádriceps y glúteos',
+              description: 'Ejecuta con ritmo controlado y reduce el rango si resulta incómodo.',
             },
             {
-              name: 'Flexiones de brazos (Push-ups) o inclinadas',
+              name: 'Flexiones de brazos o inclinadas',
               sets: 3,
-              reps: '8-10',
+              reps: '6-10',
               restSeconds: 90,
-              targetMuscle: 'Pecho, Hombros y Tríceps',
-              description: 'Mantén el core firme sin arquear la zona lumbar.'
+              targetMuscle: 'Pecho, hombros y tríceps',
+              description: 'Usa una variante que puedas realizar con técnica cómoda.',
             },
             {
               name: 'Remo con mancuerna o banda elástica',
               sets: 3,
-              reps: '12',
+              reps: '8-12',
               restSeconds: 90,
-              targetMuscle: 'Espalda y Bíceps',
-              description: 'Jala hacia la cadera manteniendo la postura recta.'
+              targetMuscle: 'Espalda y bíceps',
+              description: 'Mantén una ejecución controlada y sin dolor.',
             },
             {
-              name: 'Plancha Abdominal Isometrica',
+              name: 'Plancha abdominal',
               sets: 3,
-              reps: '30 seg',
+              reps: '20-30 seg',
               restSeconds: 60,
-              targetMuscle: 'Core y Estabilidad',
-              description: 'Ideal para estabilizar columna en trabajos pesados de mina.'
-            }
+              targetMuscle: 'Core y estabilidad',
+              description: 'Finaliza la serie si pierdes la técnica o aparece malestar.',
+            },
           ],
           cooldown: [
-            { exercise: 'Estiramiento de isquiotibiales y pectorales', duration: '3 min', notes: 'Sostener 20s sin rebotar' },
-            { exercise: 'Ejercicios de respiración diafragmática oxigenante', duration: '2 min', notes: 'Inhalar en 4s, exhalar en 6s' }
-          ]
+            {
+              exercise: 'Movilidad y estiramiento suave',
+              duration: '3 min',
+              notes: 'Sin rebotes ni posiciones dolorosas',
+            },
+            {
+              exercise: 'Respiración tranquila',
+              duration: '2 min',
+              notes: 'Recupera de forma gradual',
+            },
+          ],
+          healthData: healthContext,
         });
       }
 
       const ai = new GoogleGenAI({
         apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build'
-          }
-        }
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
       });
 
+      const chronicConditions = Array.isArray(healthProfile?.chronicConditions) && healthProfile.chronicConditions.length > 0
+        ? healthProfile.chronicConditions.join(', ')
+        : 'no informado';
+
       const prompt = `
-Eres un preparador físico de elite especializado en medicina deportiva laboral y entrenamiento en altitud geográfica (minería 14x14 a más de 3,000m-4,500m de altitud).
-Diseña un plan de rutina de ejercicios hiper-personalizado en formato JSON para el usuario.
+Eres un asistente de actividad física integrado en LifeOS. Genera una rutina conservadora y práctica para una persona que puede trabajar por turnos y en altitud.
 
-DATOS DEL USUARIO:
-- Edad/Perfil: Peso ${healthProfile?.weightKg || 78}kg, Estatura ${healthProfile?.heightCm || 175}cm, IMC ${healthProfile?.weightKg ? (healthProfile.weightKg / Math.pow((healthProfile.heightCm || 175)/100, 2)).toFixed(1) : '25'}.
-- Condiciones Crónicas / Alergias: ${healthProfile?.chronicConditions?.join(', ') || 'Ninguna'}.
-- Altitud Habitual / Mina: ${healthProfile?.miningAltitudeMeters || 4200} metros sobre el nivel del mar.
-- Turno Minero Actual: Día ${shiftInfo?.dayInPhase || 1} de 14 en ${shiftInfo?.phase === 'work' ? 'FAENA MINERA (Campamento)' : 'DESCANSO (Ciudad/Hogar)'}.
-- Última Biometría Registrada:
-  * SpO2 (Saturación Oxígeno): ${latestLog?.spO2Pct || 96}%
-  * Presión Arterial: ${latestLog?.bloodPressureSys || 120}/${latestLog?.bloodPressureDia || 80} mmHg
-  * Frecuencia Cardíaca en Reposo: ${latestLog?.heartRateBpm || 68} BPM
-  * Horas de Sueño Anoche: ${latestLog?.sleepHours || 7.5} horas (Calidad: ${latestLog?.sleepQuality || 'buena'})
-  * Nivel de Energía Declarado: ${latestLog?.energyLevel || 8}/10
-- Equipamiento Disponible: ${equipment || 'Autocarga (Peso corporal en habitación) + Mancuernas ligeras'}
-- Tiempo Disponible: ${durationMinutes || 30} minutos.
-- Objetivo Principal: ${focusGoal || 'Movilidad y Fuerza Funcional para Evitar Fatiga en Faena'}
-- Solicitud Adicional del Usuario: ${userPrompt || 'Sugerir rutina equilibrada e inspiradora'}.
+DATOS DISPONIBLES DEL USUARIO:
+- Perfil: ${formatProfile(healthProfile)}.
+- Condiciones crónicas / alergias: ${chronicConditions}.
+- Altitud registrada: ${altitude}.
+- Turno: ${formatShift(shiftInfo)}.
+- Biometría registrada:
+${healthContext}
+- Equipamiento: ${formatText(equipment, 'no informado')}.
+- Tiempo disponible: ${formatMetric(durationMinutes, ' min')}.
+- Objetivo: ${formatText(focusGoal, 'rutina general')}.
+- Solicitud adicional: ${formatText(userPrompt, 'ninguna')}.
 
-REGLAS DE SEGURIDAD EN ALTITUD:
-1. Si el SpO2 es menor a 92% o la altitud es >3800m, evita ejercicios anaeróbicos lácticos de alta intensidad (HIIT extremo). Prefiere ritmo moderado constante con descansos más largos.
-2. Incluye precauciones de oxigenación e hidratación.
-3. Adapta el volumen si el sueño fue <6 horas o el nivel de energía es <5.
+REGLAS DE SEGURIDAD:
+1. No inventes biometría, antecedentes, altitud ni condiciones que no estén informadas. Un dato ausente debe tratarse como "no disponible".
+2. No interpretes la ausencia de datos como un valor normal y no declares al usuario clínicamente estable, apto o sano.
+3. No realices diagnósticos ni sustituyas indicaciones de profesionales o protocolos médicos/laborales.
+4. Evita prescribir límites médicos universales de SpO2, presión, frecuencia cardíaca, hidratación u otros parámetros sin contexto clínico individual.
+5. Si el usuario reporta síntomas o valores que le preocupan, recomienda detener o reducir la actividad y seguir el protocolo de salud de su lugar de trabajo o consultar a un profesional.
+6. Cuando falten datos de salud, ofrece una rutina general de intensidad conservadora y explica que no está personalizada clínicamente.
 
 Devuelve EXCLUSIVAMENTE un JSON con la siguiente estructura:
 {
@@ -154,10 +201,7 @@ Devuelve EXCLUSIVAMENTE un JSON con la siguiente estructura:
             properties: {
               title: { type: Type.STRING },
               summary: { type: Type.STRING },
-              precautions: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              },
+              precautions: { type: Type.ARRAY, items: { type: Type.STRING } },
               warmup: {
                 type: Type.ARRAY,
                 items: {
@@ -165,9 +209,9 @@ Devuelve EXCLUSIVAMENTE un JSON con la siguiente estructura:
                   properties: {
                     exercise: { type: Type.STRING },
                     duration: { type: Type.STRING },
-                    notes: { type: Type.STRING }
-                  }
-                }
+                    notes: { type: Type.STRING },
+                  },
+                },
               },
               exercises: {
                 type: Type.ARRAY,
@@ -179,9 +223,9 @@ Devuelve EXCLUSIVAMENTE un JSON con la siguiente estructura:
                     reps: { type: Type.STRING },
                     restSeconds: { type: Type.INTEGER },
                     targetMuscle: { type: Type.STRING },
-                    description: { type: Type.STRING }
-                  }
-                }
+                    description: { type: Type.STRING },
+                  },
+                },
               },
               cooldown: {
                 type: Type.ARRAY,
@@ -190,136 +234,139 @@ Devuelve EXCLUSIVAMENTE un JSON con la siguiente estructura:
                   properties: {
                     exercise: { type: Type.STRING },
                     duration: { type: Type.STRING },
-                    notes: { type: Type.STRING }
-                  }
-                }
-              }
-            }
-          }
-        }
+                    notes: { type: Type.STRING },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
 
       const workoutData = JSON.parse(response.text || '{}');
       return res.json(workoutData);
     } catch (err: any) {
       console.error('Error generating AI workout:', err);
-      res.status(500).json({ error: 'Error al generar la rutina con IA', details: err.message });
+      return res.status(500).json({ error: 'Error al generar la rutina con IA', details: err.message });
     }
   });
 
-  // AI Chat Assistant Endpoint (LifeOS Copilot)
   app.post('/api/ai/chat', async (req, res) => {
     try {
       const { messages, userContext } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
-
       const lastUserMessage = messages && messages.length > 0 ? messages[messages.length - 1].content : '';
 
       if (!apiKey) {
-        // High quality fallback when key is not configured in environment
-        let fallbackReply = `Hola 👋. Soy **LifeOS Copilot**. Actualmente estoy operando en modo local asistido.\n\n`;
-
+        let fallbackReply = 'Soy **LifeOS Copilot** y estoy operando en modo local asistido.\n\n';
         const lowerMsg = (lastUserMessage || '').toLowerCase();
+
         if (lowerMsg.includes('turno') || lowerMsg.includes('faena') || lowerMsg.includes('descanso')) {
-          fallbackReply += `Actualmente estás en el día **${userContext?.shiftInfo?.dayInPhase || 1}** de tu ciclo **${userContext?.shiftInfo?.workDays || 14}x${userContext?.shiftInfo?.restDays || 14}** (${userContext?.shiftInfo?.phase === 'work' ? 'Faena Minera' : 'Descanso en Hogar'}).\n\n*Consejo*: Recuerda hidratarte con al menos 3.5 Litros de agua si estás en la mina (${userContext?.healthProfile?.miningAltitudeMeters || 4200} msnm).`;
-        } else if (lowerMsg.includes('salud') || lowerMsg.includes('spo2') || lowerMsg.includes('presion') || lowerMsg.includes('oxigeno')) {
-          fallbackReply += `Tu última biometría registrada indica:\n- **Saturación SpO2**: ${userContext?.latestBiometrics?.spO2Pct || 96}%\n- **Presión Arterial**: ${userContext?.latestBiometrics?.bloodPressureSys || 120}/${userContext?.latestBiometrics?.bloodPressureDia || 80} mmHg\n- **Ritmo Cardíaco**: ${userContext?.latestBiometrics?.heartRateBpm || 68} BPM\n\nTus indicadores están en un rango operativo estable.`;
-        } else if (lowerMsg.includes('finanza') || lowerMsg.includes('gasto') || lowerMsg.includes('presupuesto') || lowerMsg.includes('dinero')) {
-          fallbackReply += `En tus finanzas tienes **${userContext?.accountsCount || 2} cuentas** registradas con moneda principal **${userContext?.currency || 'CLP'}**. Mantener el control de gastos de transporte y equipo en faena es clave.`;
+          const shift = formatShift(userContext?.shiftInfo);
+          const altitude = formatMetric(userContext?.healthProfile?.miningAltitudeMeters, ' m');
+          fallbackReply += `Configuración de turno disponible: **${shift}**. Altitud registrada: **${altitude}**.\n\nUsa los protocolos de hidratación, descanso y seguridad definidos para tu lugar de trabajo; LifeOS no sustituye esas indicaciones.`;
+        } else if (
+          lowerMsg.includes('salud') ||
+          lowerMsg.includes('spo2') ||
+          lowerMsg.includes('presion') ||
+          lowerMsg.includes('oxigeno')
+        ) {
+          fallbackReply += healthFallbackReply(userContext?.latestBiometrics);
+        } else if (
+          lowerMsg.includes('finanza') ||
+          lowerMsg.includes('gasto') ||
+          lowerMsg.includes('presupuesto') ||
+          lowerMsg.includes('dinero')
+        ) {
+          fallbackReply += `En tus finanzas hay **${userContext?.accountsCount ?? 0} cuentas** registradas con moneda principal **${userContext?.currency || 'CLP'}**.`;
         } else if (lowerMsg.includes('tarea') || lowerMsg.includes('pendiente') || lowerMsg.includes('habito')) {
-          fallbackReply += `Tienes **${userContext?.pendingTasksCount || 3} tareas pendientes** y **${userContext?.habitsCount || 4} hábitos activos**. ¿Te gustaría que priorice tus tareas para hoy?`;
+          fallbackReply += `Tienes **${userContext?.pendingTasksCount ?? 0} tareas pendientes** y **${userContext?.habitsCount ?? 0} hábitos activos**.`;
         } else {
-          fallbackReply += `¿En qué puedo ayudarte hoy? Puedo analizar tus métricas de altitud, organizar tus tareas para el turno minero, revisar tus finanzas o recomendarte una rutina de salud.`;
+          fallbackReply += 'Puedo ayudarte a organizar turnos, tareas, hábitos, finanzas y mostrar los datos de salud que hayas registrado. No inventaré biometría que no esté disponible.';
         }
 
         return res.json({
           reply: fallbackReply,
           suggestedActions: [
-            "¿Cómo está mi saturación de oxígeno?",
-            "Recomiéndame una rutina para la faena",
-            "Resumen de tareas pendientes",
-            "¿Cuándo es mi bajada de descanso?"
-          ]
+            'Ver mis datos de salud registrados',
+            'Planificar mi día de turno',
+            'Resumen de tareas pendientes',
+            'Resumen de gastos del mes',
+          ],
         });
       }
 
       const ai = new GoogleGenAI({
         apiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
       });
 
       const systemInstruction = `
-Eres "LifeOS Copilot", el asistente inteligente integrado en la aplicación personal LifeOS.
-Tu misión es asesorar al usuario de forma proactiva, empática, precisa y profesional.
-El usuario trabaja con régimen minero / laboral de turnos (ej. 14x14) en alta altitud geográfica.
+Eres "LifeOS Copilot", el asistente integrado en la aplicación personal LifeOS.
+Ayudas a organizar turnos, tareas, hábitos, finanzas y a mostrar información registrada por el usuario.
 
-CONTEXTO ACTUAL DEL USUARIO:
-- Turno Actual: Día ${userContext?.shiftInfo?.dayInPhase || 1} de ${userContext?.shiftInfo?.workDays || 14} (${userContext?.shiftInfo?.phase === 'work' ? 'FAENA EN MINA / CAMPAMENTO' : 'DESCANSO EN CIUDAD'})
-- Ubicación / Mina: ${userContext?.shiftInfo?.locationName || 'Campamento Minero'}
-- Altitud Operativa: ${userContext?.healthProfile?.miningAltitudeMeters || 4200} msnm
-- Biometría Reciente:
-  * SpO2 (Oxigenación): ${userContext?.latestBiometrics?.spO2Pct || 96}%
-  * Presión: ${userContext?.latestBiometrics?.bloodPressureSys || 120}/${userContext?.latestBiometrics?.bloodPressureDia || 80} mmHg
-  * Pulso: ${userContext?.latestBiometrics?.heartRateBpm || 68} BPM
-  * Sueño: ${userContext?.latestBiometrics?.sleepHours || 7.5} hrs
-- Resumen de Datos:
-  * Tareas Pendientes: ${userContext?.pendingTasksCount || 0}
-  * Hábitos Activos: ${userContext?.habitsCount || 0}
-  * Moneda Principal: ${userContext?.currency || 'CLP'}
+CONTEXTO ACTUAL:
+- Turno: ${formatShift(userContext?.shiftInfo)}.
+- Ubicación: ${formatText(userContext?.shiftInfo?.locationName)}.
+- Altitud registrada: ${formatMetric(userContext?.healthProfile?.miningAltitudeMeters, ' m')}.
+- Biometría registrada:
+${biometricsContext(userContext?.latestBiometrics)}
+- Tareas pendientes: ${userContext?.pendingTasksCount ?? 0}.
+- Hábitos activos: ${userContext?.habitsCount ?? 0}.
+- Moneda principal: ${userContext?.currency || 'CLP'}.
 
 REGLAS DE RESPUESTA:
-1. Responde en español amigable, estructurado (puedes usar Markdown con viñetas y negritas).
-2. Ten en cuenta la salud física en altitud (hipoxia, hidratación, fatiga) si el usuario pregunta sobre ejercicio, fatiga o turnos.
-3. Sé directo, práctico y motivador. Si el usuario pide sugerencias, da recomendaciones accionables en listas cortas.
+1. Responde en español de forma clara, práctica y estructurada.
+2. No inventes biometría, altitud, antecedentes ni otros datos ausentes. Indica "no disponible" cuando corresponda.
+3. No interpretes datos ausentes como normales y no declares al usuario clínicamente estable, sano o apto.
+4. No diagnostiques ni sustituyas evaluación médica, protocolos laborales o indicaciones profesionales.
+5. Si el usuario menciona síntomas o valores que le preocupan, evita conclusiones clínicas automáticas y sugiere seguir el protocolo de salud correspondiente o consultar a un profesional.
+6. Para recomendaciones de actividad física, mantén un enfoque conservador y evita límites médicos universales sin contexto individual.
 `;
 
       const contents = (messages || []).map((m: any) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
+        parts: [{ text: m.content }],
       }));
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.6-flash',
         contents,
-        config: {
-          systemInstruction,
-        }
+        config: { systemInstruction },
       });
 
-      const reply = response.text || 'No pude generar una respuesta en este momento.';
-
       return res.json({
-        reply,
+        reply: response.text || 'No pude generar una respuesta en este momento.',
         suggestedActions: [
-          "¿Cómo está mi saturación de oxígeno?",
-          "Planificar mi día de turno",
-          "Resumen de gastos del mes",
-          "Consejos para dormir mejor en campamento"
-        ]
+          'Ver mis datos de salud registrados',
+          'Planificar mi día de turno',
+          'Resumen de gastos del mes',
+          'Revisar tareas pendientes',
+        ],
       });
     } catch (err: any) {
       console.error('Error in AI Chat assistant:', err);
       return res.status(500).json({
         error: 'Error procesando respuesta del asistente IA',
-        details: err.message
+        details: err.message,
       });
     }
   });
+
   app.post('/api/calendar/sync', async (req, res) => {
     try {
-      const { syncType, shiftConfig, tasksCount } = req.body;
+      const { syncType, tasksCount } = req.body;
       const count = syncType === 'shifts' ? 14 : syncType === 'tasks' ? (tasksCount || 5) : 14 + (tasksCount || 5);
       return res.json({
         success: true,
         eventsSynced: count,
-        message: `Sincronización con Google Calendar completada. (${count} eventos procesados)`
+        message: `Sincronización con Google Calendar completada. (${count} eventos procesados)`,
       });
     } catch (err: any) {
-      res.status(500).json({ error: 'Error sincronizando calendario', details: err.message });
+      return res.status(500).json({ error: 'Error sincronizando calendario', details: err.message });
     }
   });
 
-  // AI Voice Dictation Parser Endpoint
   app.post('/api/ai/parse-voice', async (req, res) => {
     try {
       const { text } = req.body;
@@ -333,18 +380,20 @@ REGLAS DE RESPUESTA:
         try {
           const ai = new GoogleGenAI({
             apiKey,
-            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
           });
 
           const prompt = `
-Analiza la siguiente transcripción dictada por voz en español para una app de gestión personal (LifeOS).
+Analiza la siguiente transcripción dictada por voz en español para LifeOS.
 Determina cuál de estas intenciones corresponde mejor al mensaje:
-1) "expense": Gasto en pesos chilenos (CLP) o dinero (ej: "gaste 15 mil en almuerzo", "pague 45000 de gasolina").
-2) "income": Ingreso de dinero (ej: "recibi un bono de 200 mil pesos", "me pagaron 500.000").
-3) "health_log": Registro biométrico/médico (ej: "tengo 98 de saturación, pulso 65 y presión 120 con 80", "mi peso hoy es 81 kilos").
-4) "task": Tarea o pendiente por realizar (ej: "recordar comprar pasajes para el turno", "tarea enviar informe").
+1) "expense": gasto de dinero.
+2) "income": ingreso de dinero.
+3) "health_log": registro biométrico dictado por el usuario.
+4) "task": tarea o pendiente.
 
 Texto dictado: "${text}"
+
+Para health_log, extrae solo valores expresamente dichos por el usuario. No completes ni estimes biometría ausente.
 
 Devuelve EXCLUSIVAMENTE un JSON con:
 {
@@ -369,25 +418,28 @@ Devuelve EXCLUSIVAMENTE un JSON con:
           const response = await ai.models.generateContent({
             model: 'gemini-3.6-flash',
             contents: prompt,
-            config: {
-              responseMimeType: 'application/json'
-            }
+            config: { responseMimeType: 'application/json' },
           });
 
-          const parsed = JSON.parse(response.text || '{}');
-          return res.json(parsed);
+          return res.json(JSON.parse(response.text || '{}'));
         } catch (e) {
           console.error('Gemini voice parsing failed, fallback to local parser', e);
         }
       }
 
-      // Local Regex Fallback Parser for Chilean Spanish
       const lower = text.toLowerCase();
       let intent: 'expense' | 'income' | 'health_log' | 'task' | 'unknown' = 'unknown';
       let summary = 'Transcripción procesada.';
       const data: any = {};
 
-      if (lower.includes('saturaci') || lower.includes('spo2') || lower.includes('pulso') || lower.includes('presi') || lower.includes('kilo') || lower.includes('peso')) {
+      if (
+        lower.includes('saturaci') ||
+        lower.includes('spo2') ||
+        lower.includes('pulso') ||
+        lower.includes('presi') ||
+        lower.includes('kilo') ||
+        lower.includes('peso')
+      ) {
         intent = 'health_log';
         const spo2Match = lower.match(/(?:saturaci[oó]n|spo2|ox[ií]geno)[^\d]*(\d{2,3})/);
         if (spo2Match) data.spO2Pct = parseInt(spo2Match[1], 10);
@@ -404,8 +456,21 @@ Devuelve EXCLUSIVAMENTE un JSON con:
         const weightMatch = lower.match(/(?:peso|kilos|kg)[^\d]*(\d{2,3}(?:\.\d)?)/);
         if (weightMatch) data.weightKg = parseFloat(weightMatch[1]);
 
-        summary = `Salud: SpO2 ${data.spO2Pct || '--'}%, Pulso ${data.heartRateBpm || '--'} BPM`;
-      } else if (lower.includes('gast') || lower.includes('pagu') || lower.includes('compr') || lower.includes('pesos') || lower.includes('clp') || lower.includes('lucas')) {
+        const parts: string[] = [];
+        if (isFiniteNumber(data.spO2Pct)) parts.push(`SpO2 ${data.spO2Pct}%`);
+        if (isFiniteNumber(data.heartRateBpm)) parts.push(`Pulso ${data.heartRateBpm} BPM`);
+        if (isFiniteNumber(data.bloodPressureSys) && isFiniteNumber(data.bloodPressureDia)) {
+          parts.push(`Presión ${formatBloodPressure(data.bloodPressureSys, data.bloodPressureDia)}`);
+        }
+        summary = parts.length > 0 ? `Salud registrada: ${parts.join(', ')}` : 'Registro de salud detectado sin valores reconocibles.';
+      } else if (
+        lower.includes('gast') ||
+        lower.includes('pagu') ||
+        lower.includes('compr') ||
+        lower.includes('pesos') ||
+        lower.includes('clp') ||
+        lower.includes('lucas')
+      ) {
         intent = 'expense';
         let amount = 0;
         const numMatch = lower.match(/(\d+[\d\.]*)\s*(?:mil|k)?/);
@@ -419,7 +484,12 @@ Devuelve EXCLUSIVAMENTE un JSON con:
         data.description = text;
         data.category = lower.includes('super') ? 'Alimentación & Supermercado' : 'Gastos Varios';
         summary = `Gasto detectado: $${amount.toLocaleString('es-CL')} CLP en ${data.category}`;
-      } else if (lower.includes('ingres') || lower.includes('recib') || lower.includes('pagaron') || lower.includes('bono')) {
+      } else if (
+        lower.includes('ingres') ||
+        lower.includes('recib') ||
+        lower.includes('pagaron') ||
+        lower.includes('bono')
+      ) {
         intent = 'income';
         let amount = 0;
         const numMatch = lower.match(/(\d+[\d\.]*)\s*(?:mil|k)?/);
@@ -440,15 +510,14 @@ Devuelve EXCLUSIVAMENTE un JSON con:
 
       return res.json({ intent, summary, data });
     } catch (err: any) {
-      res.status(500).json({ error: 'Error procesando comando de voz', details: err.message });
+      return res.status(500).json({ error: 'Error procesando comando de voz', details: err.message });
     }
   });
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa'
+      appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
