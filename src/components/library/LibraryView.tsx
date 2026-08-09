@@ -132,9 +132,9 @@ export const LibraryView: React.FC = () => {
     if (!groupName.trim() || !linkedBook) return;
 
     const ownerId = currentUser?.uid || 'local';
-    const targetPage = Math.max(
-      linkedBook.currentPage + 1,
-      Math.min(linkedBook.totalPages, parseInt(groupTargetPage, 10) || linkedBook.totalPages),
+    const targetPage = Math.min(
+      linkedBook.totalPages,
+      Math.max(linkedBook.currentPage, parseInt(groupTargetPage, 10) || linkedBook.totalPages),
     );
 
     createReadingGroup({
