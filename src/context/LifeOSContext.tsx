@@ -287,7 +287,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     accounts: setAccounts, budgets: setBudgets, debts: setDebts,
     transactions: setTransactions, financialGoals: setFinancialGoals, recurringTransactions: setRecurringTransactions, books: setBooks,
     readingLogs: setReadingLogs, bookNotes: setBookNotes,
-    projects: setProjects, healthLogs: setHealthLogs,
+    projects: setProjects, healthLogs: setHealthLogs, workoutLogs: setWorkoutLogs,
   };
 
   // Load state from localStorage on mount
@@ -315,6 +315,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (parsed.shiftConfig) setShiftConfig(parsed.shiftConfig);
         if (parsed.healthProfile) setHealthProfile(parsed.healthProfile);
         if (parsed.healthLogs) setHealthLogs(parsed.healthLogs);
+        if (parsed.workoutLogs) setWorkoutLogs(parsed.workoutLogs);
         if (parsed.appSettings) setAppSettings(parsed.appSettings);
         if (shouldAddCuratedContent) localStorage.setItem(CURATED_CONTENT_KEY, 'done');
       } else {
@@ -451,7 +452,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const collectionState: Partial<Record<string, SyncCollection>> = {
       tasks: 'tasks', habits: 'habits', habitLogs: 'habitLogs', projects: 'projects',
       accounts: 'finances', budgets: 'finances', debts: 'finances', transactions: 'finances', financialGoals: 'finances', recurringTransactions: 'finances',
-      books: 'library', readingLogs: 'library', bookNotes: 'library', healthLogs: 'health',
+      books: 'library', readingLogs: 'library', bookNotes: 'library', healthLogs: 'health', workoutLogs: 'health',
     };
     const stateKey = collectionState[sub];
     if (stateKey) setSyncState(prev => ({ ...prev, [stateKey]: 'syncing' }));
@@ -526,13 +527,13 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => {
     try {
       const dataToSave = {
-        tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, appSettings
+        tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (e) {
       console.error('Error saving to localStorage:', e);
     }
-  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, appSettings]);
+  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings]);
 
   const signInWithGoogle = async () => {
     setIsSigningIn(true);
