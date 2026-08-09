@@ -28,10 +28,10 @@ export function matchesShift(
 function taskBucket(task: Task, today: string): number {
   if (task.dueDate && task.dueDate < today) return 0;
   if (task.dueDate === today) return 1;
+  if (task.dueDate && task.dueDate > today) return 5;
   if (task.priority === 'p1') return 2;
   if (task.priority === 'p2') return 3;
-  if (!task.dueDate) return 4;
-  return 5;
+  return 4;
 }
 
 export function rankDailyTasks(tasks: Task[], today: string, phase: ShiftType): Task[] {
