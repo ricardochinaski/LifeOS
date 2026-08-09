@@ -14,6 +14,7 @@ const Visibility = { Secret: -1, Private: 0, Public: 1 } as const;
 const AUTOMATION_SETTINGS_KEY = 'lifeos_daily_automation_v1';
 const AUTOMATION_ID_MIN = 700_000_000;
 const AUTOMATION_ID_MAX = 1_799_999_999;
+const LEGACY_SYSTEM_NOTIFICATION_IDS = new Set([1001, 2001, 2002]);
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -182,6 +183,10 @@ export async function cancelDailyAutomationNotifications() {
     extra?.lifeosAutomation === true || (id >= AUTOMATION_ID_MIN && id <= AUTOMATION_ID_MAX));
 }
 
+async function cancelLegacySystemNotifications() {
+  await cancelPendingWhere((id) => LEGACY_SYSTEM_NOTIFICATION_IDS.has(id));
+}
+
 export async function syncDailyAutomationNotifications(input: {
   tasks: Task[];
   habits: Habit[];
@@ -191,6 +196,10 @@ export async function syncDailyAutomationNotifications(input: {
   now?: Date;
 }): Promise<{ scheduled: number; permission: NotificationPermission }> {
   if (!isNative()) return { scheduled: 0, permission: 'denied' };
+
+  // Migrate away any system reminders scheduled by pre-4.4 builds before the
+  // idempotent Daily Plan IDs existed. This does not touch task/habit alarms.
+  await cancelLegacySystemNotifications();
 
   const permission = await getNotificationPermissionAsync();
   if (permission !== 'granted') return { scheduled: 0, permission };
