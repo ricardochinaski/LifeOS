@@ -12,11 +12,11 @@ import { PushNotificationsModal } from './components/integrations/PushNotificati
 import { Bot } from 'lucide-react';
 
 import { DashboardViewV2 } from './components/dashboard/DashboardViewV2';
-import { TasksView } from './components/tasks/TasksView';
-import { HabitsView } from './components/habits/HabitsView';
-import { FinancesView } from './components/finances/FinancesView';
-import { LibraryView } from './components/library/LibraryView';
-import { HealthView } from './components/health/HealthView';
+import { TasksOperationalView } from './components/tasks/TasksOperationalView';
+import { HabitsOperationalView } from './components/habits/HabitsOperationalView';
+import { FinancesOperationalView } from './components/finances/FinancesOperationalView';
+import { LibraryOperationalView } from './components/library/LibraryOperationalView';
+import { HealthOperationalView } from './components/health/HealthOperationalView';
 import { SettingsView } from './components/settings/SettingsView';
 
 const MainContent: React.FC = () => {
@@ -25,11 +25,11 @@ const MainContent: React.FC = () => {
   return (
     <main className="lifeos-content max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(1.5rem+env(safe-area-inset-top,0px))]">
       {activeTab === 'dashboard' && <DashboardViewV2 />}
-      {activeTab === 'tasks' && <TasksView />}
-      {activeTab === 'habits' && <HabitsView />}
-      {activeTab === 'finances' && <FinancesView />}
-      {activeTab === 'library' && <LibraryView />}
-      {activeTab === 'health' && <HealthView />}
+      {activeTab === 'tasks' && <TasksOperationalView />}
+      {activeTab === 'habits' && <HabitsOperationalView />}
+      {activeTab === 'finances' && <FinancesOperationalView />}
+      {activeTab === 'library' && <LibraryOperationalView />}
+      {activeTab === 'health' && <HealthOperationalView />}
       {activeTab === 'settings' && <SettingsView />}
     </main>
   );
