@@ -18,6 +18,12 @@ android/app/build/
 android/captures/
 android/.externalNativeBuild/
 
+# Android signing material — never commit private keys
+*.jks
+*.keystore
+*.p12
+*.pfx
+
 # Capacitor generated
 capacitor.config.json
 
