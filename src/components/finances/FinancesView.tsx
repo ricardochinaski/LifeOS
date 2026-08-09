@@ -1,3 +1,4 @@
+import { todayLocalDate } from '../../lib/dateOnly';
 import React, { useState, useMemo } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { FinancialAccount, Transaction, Budget, Debt, TransactionType, FinancialGoal, RecurringTransaction, RecurringServiceType } from '../../types';
@@ -98,7 +99,7 @@ export const FinancesView: React.FC = () => {
   const [txDesc, setTxDesc] = useState('');
   const [txAccountId, setTxAccountId] = useState(accounts[0]?.id || 'acc_1');
   const [txToAccountId, setTxToAccountId] = useState(accounts[1]?.id || accounts[0]?.id || '');
-  const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
+  const [txDate, setTxDate] = useState(todayLocalDate());
   const [txLinkedProjectId, setTxLinkedProjectId] = useState('');
   const [txLinkedTaskId, setTxLinkedTaskId] = useState('');
 
@@ -139,7 +140,7 @@ export const FinancesView: React.FC = () => {
   const [debtTotalInstallments, setDebtTotalInstallments] = useState('');
   const [debtPaidInstallments, setDebtPaidInstallments] = useState('');
   const [debtDueDate, setDebtDueDate] = useState('');
-  const [debtStartDate, setDebtStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [debtStartDate, setDebtStartDate] = useState(todayLocalDate());
   const [debtNotes, setDebtNotes] = useState('');
   const [isGoalFormOpen, setIsGoalFormOpen] = useState(false);
   const [goalName, setGoalName] = useState('');
@@ -156,7 +157,7 @@ export const FinancesView: React.FC = () => {
   const [recurringBillingDay, setRecurringBillingDay] = useState('5');
   const [recurringAccountId, setRecurringAccountId] = useState(accounts[0]?.id || '');
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayLocalDate();
   const currentMonthStr = todayStr.substring(0, 7);
 
   // Calculated Totals in CLP
@@ -414,7 +415,7 @@ export const FinancesView: React.FC = () => {
     setDebtTotalInstallments('');
     setDebtPaidInstallments('');
     setDebtDueDate('');
-    setDebtStartDate(new Date().toISOString().split('T')[0]);
+    setDebtStartDate(todayLocalDate());
     setDebtNotes('');
     setIsDebtModalOpen(true);
   };

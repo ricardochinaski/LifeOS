@@ -1,3 +1,4 @@
+import { todayLocalDate } from '../../lib/dateOnly';
 import React, { useState, useEffect } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { ShiftDashboardCard } from './ShiftDashboardCard';
@@ -68,7 +69,7 @@ export const DashboardView: React.FC = () => {
     setWidgetConfig((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayLocalDate();
 
   // 1. Today's Habits
   const habitsLoggedToday = habitLogs.filter((l) => l.date === todayStr).map((l) => l.habitId);

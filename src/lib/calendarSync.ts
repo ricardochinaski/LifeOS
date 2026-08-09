@@ -1,3 +1,4 @@
+import { addDaysToDateOnly } from './dateOnly';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { ShiftConfig } from '../types';
 import { isNative } from './native';
@@ -21,10 +22,7 @@ export function generateShiftEvents(shiftConfig: ShiftConfig): ShiftCalendarEven
   const totalCycle = shiftConfig.restDays + shiftConfig.workDays;
 
   for (let i = 0; i < totalCycle; i++) {
-    const date = new Date(shiftConfig.anchorDate + 'T00:00:00');
-    date.setDate(date.getDate() + i);
-
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = addDaysToDateOnly(shiftConfig.anchorDate, i);
     const dayInCycle = i % totalCycle;
     const isRest = shiftConfig.currentPhase === 'rest'
       ? dayInCycle < shiftConfig.restDays

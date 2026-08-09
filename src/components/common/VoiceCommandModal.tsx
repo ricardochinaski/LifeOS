@@ -1,3 +1,4 @@
+import { todayLocalDate } from '../../lib/dateOnly';
 import React, { useState, useEffect, useRef } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { parseVoiceCommand } from '../../lib/api';
@@ -134,12 +135,12 @@ export const VoiceCommandModal: React.FC<VoiceCommandModalProps> = ({ isOpen, on
         amount: amount,
         category: data.category || (intent === 'expense' ? 'Gastos Varios' : 'Otros Ingresos'),
         description: data.description || transcript || 'Dictado por voz',
-        date: new Date().toISOString().split('T')[0]
+        date: todayLocalDate()
       });
       showToast(`¡${intent === 'expense' ? 'Gasto' : 'Ingreso'} de $${amount.toLocaleString('es-CL')} CLP registrado!`);
     } else if (intent === 'health_log') {
       addHealthLog({
-        date: new Date().toISOString().split('T')[0],
+        date: todayLocalDate(),
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         spO2Pct: data.spO2Pct || 98,
         heartRateBpm: data.heartRateBpm || 70,
@@ -173,7 +174,7 @@ export const VoiceCommandModal: React.FC<VoiceCommandModalProps> = ({ isOpen, on
         description: `Creada por comando de voz: "${transcript}"`,
         status: 'todo',
         priority: data.priority || 'p2',
-        dueDate: new Date().toISOString().split('T')[0],
+        dueDate: todayLocalDate(),
         subtasks: []
       });
       showToast('¡Tarea agregada a tu lista de pendientes!');

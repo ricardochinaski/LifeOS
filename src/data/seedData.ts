@@ -1,10 +1,11 @@
+import { formatLocalDate } from '../lib/dateOnly';
 import { AreaCategory, Project, Task, Habit, HabitLog, FinancialAccount, Transaction, Budget, Book, ReadingLog, BookNote, HealthProfile, HealthLog, Debt, ReadingGroup, ReadingSession, AppCustomSettings } from '../types';
 
 // Helper to get today/yesterday ISO dates
 const getTodayStr = (offsetDays = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().split('T')[0];
+  return formatLocalDate(d);
 };
 
 const currentMonthStr = getTodayStr().substring(0, 7);
