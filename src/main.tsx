@@ -1,7 +1,6 @@
 import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { sanitizePersistedState } from './lib/storageRecovery';
-import './lib/syncProbe';
 import './index.css';
 
 const getErrorMessage = (error: unknown) =>
