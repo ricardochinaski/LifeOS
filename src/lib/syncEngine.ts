@@ -24,7 +24,6 @@ export type SyncCollectionName = (typeof SYNC_COLLECTIONS)[number];
 
 export interface SyncEntity {
   id: string;
-  [key: string]: unknown;
 }
 
 export type SyncDataset = Record<SyncCollectionName, readonly SyncEntity[]>;
