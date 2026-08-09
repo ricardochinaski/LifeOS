@@ -43,8 +43,6 @@ const AppContent: React.FC = () => {
     isCalendarModalOpen, closeCalendarModal,
     isNotificationsModalOpen, closeNotificationsModal,
     appSettings,
-    importDataJSON,
-    showToast,
   } = useLifeOS();
 
   useEffect(() => {
@@ -52,34 +50,6 @@ const AppContent: React.FC = () => {
     document.documentElement.setAttribute('data-density', appSettings.uiDensity);
     document.documentElement.setAttribute('data-font', appSettings.fontFamily);
   }, [appSettings.primaryColor, appSettings.uiDensity, appSettings.fontFamily]);
-
-  useEffect(() => {
-    importDataJSON({
-      workoutLogs: [
-        {
-          id: 'wlog_chatgpt_2026_08_08_30m',
-          date: '2026-08-08',
-          type: 'other',
-          durationMinutes: 30,
-          exercises: [],
-          notes: 'Entrenamiento de 30 minutos registrado como prueba desde ChatGPT.',
-        },
-      ],
-      habitLogs: [
-        {
-          id: 'hlog_chatgpt_2026_08_08_30m',
-          habitId: 'habit_1',
-          date: '2026-08-08',
-          value: 30,
-          completed: false,
-          notes: 'Entrenamiento de 30 minutos',
-        },
-      ],
-    }, 'merge');
-    showToast('');
-    // One-time production smoke-test seed. IDs are deterministic, so merging is idempotent.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="lifeos-shell min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors selection:bg-emerald-500 selection:text-white pb-[calc(5rem+env(safe-area-inset-bottom,0px))] relative">
