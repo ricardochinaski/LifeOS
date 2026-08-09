@@ -3,6 +3,14 @@ apply plugin: 'com.android.application'
 def lifeosVersionCode = (System.getenv("LIFEOS_VERSION_CODE") ?: "1").toInteger()
 def lifeosVersionName = System.getenv("LIFEOS_VERSION_NAME") ?: "1.0.0"
 
+def ciKeystorePath = System.getenv("LIFEOS_CI_KEYSTORE_PATH")
+def ciKeystorePassword = System.getenv("LIFEOS_CI_KEYSTORE_PASSWORD")
+def ciKeyAlias = System.getenv("LIFEOS_CI_KEY_ALIAS")
+def ciKeyPassword = System.getenv("LIFEOS_CI_KEY_PASSWORD")
+def hasCiDebugSigning = [ciKeystorePath, ciKeystorePassword, ciKeyAlias, ciKeyPassword].every { value ->
+    value != null && !value.trim().isEmpty()
+}
+
 android {
     namespace = "com.aselec.lifeos"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -19,7 +27,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    signingConfigs {
+        if (hasCiDebugSigning) {
+            ciDebug {
+                storeFile file(ciKeystorePath)
+                storePassword ciKeystorePassword
+                keyAlias ciKeyAlias
+                keyPassword ciKeyPassword
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (hasCiDebugSigning) {
+                signingConfig signingConfigs.ciDebug
+            }
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
