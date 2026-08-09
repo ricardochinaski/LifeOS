@@ -1,0 +1,203 @@
+name: Phase 1 sanitize
+
+on:
+  push:
+    branches: [agent/phase1-ai-safety]
+
+permissions:
+  contents: write
+
+jobs:
+  sanitize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/phase1-ai-safety
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply deterministic Phase 1 cleanup
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          settings = Path('src/components/settings/SettingsView.tsx')
+          text = settings.read_text()
+          text = text.replace("import { getGeminiApiKey, setGeminiApiKey } from '../../lib/gemini';\n", '')
+          for icon in ['  Key,\n', '  Eye,\n', '  EyeOff,\n', '  Zap\n']:
+              text = text.replace(icon, '')
+          marker = 'const AISection: React.FC = () => {'
+          if marker not in text:
+              raise SystemExit('AISection marker not found')
+          text = text[:text.index(marker)] + '''const AISection: React.FC = () => {
+            const { showToast, currentUser } = useLifeOS();
+
+            return (
+              <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-6 animate-fade-in">
+                <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white">IA LifeOS · Backend seguro</h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Copilot, voz y rutinas pasan por el backend de LifeOS; no se guardan claves de Gemini en el navegador.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
+                    <p className="text-xs font-black text-emerald-700 dark:text-emerald-300 flex items-center gap-2"><Cloud className="w-4 h-4" /> Servicio de IA</p>
+                    <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-300">{currentUser ? 'Sesión Google activa. Las solicitudes pueden autenticarse contra el backend.' : 'Sin sesión Google: LifeOS usa un fallback local seguro y no envía datos a Gemini.'}</p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30">
+                    <p className="text-xs font-black text-blue-700 dark:text-blue-300 flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> Privacidad</p>
+                    <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-300">La clave del proveedor se administra exclusivamente en el entorno del servidor. Los datos ausentes no se completan con biometría ficticia.</p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2 text-xs">
+                  <p className="font-bold text-slate-700 dark:text-slate-300">Funciones protegidas por la misma capa:</p>
+                  <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    <p><Bot className="w-3 h-3 inline mr-1 text-blue-400" /> Copilot IA</p>
+                    <p><Sparkles className="w-3 h-3 inline mr-1 text-amber-400" /> Interpretación de comandos de voz</p>
+                    <p><HeartPulse className="w-3 h-3 inline mr-1 text-rose-400" /> Planificador de rutinas</p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-slate-600 dark:text-slate-300 space-y-3">
+                  <p className="font-bold text-amber-700 dark:text-amber-300">Datos y seguridad</p>
+                  <p>LifeOS limita el contexto enviado al asistente y trata cualquier biometría faltante como “no disponible”. Si el backend de IA no está configurado o no responde, se usa un fallback local sin inventar métricas.</p>
+                  <button onClick={() => { localStorage.removeItem('lifeos_chat_messages'); showToast('Historial del Copilot eliminado.'); }} className="rounded-xl border border-slate-300 px-3 py-2 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:text-slate-300">Borrar historial Copilot</button>
+                </div>
+              </div>
+            );
+          };
+          '''
+          settings.write_text(text)
+
+          app = Path('src/App.tsx')
+          text = app.read_text()
+          text = text.replace("import { WorkoutPersistenceProbe } from './components/common/WorkoutPersistenceProbe';\n", '')
+          text = text.replace('      <WorkoutPersistenceProbe />\n', '')
+          app.write_text(text)
+
+          Path('src/components/common/WorkoutPersistenceProbe.tsx').unlink(missing_ok=True)
+          Path('src/lib/gemini.ts').unlink(missing_ok=True)
+
+          functions = Path('functions/src/index.ts')
+          functions.write_text('''import * as functions from 'firebase-functions';
+
+const retired = () => {
+  throw new functions.https.HttpsError(
+    'failed-precondition',
+    'Esta función de IA fue retirada. Usa el backend autenticado de LifeOS.',
+  );
+};
+
+// Se conservan temporalmente los nombres para que un futuro deploy de Firebase
+// cierre de forma explícita clientes antiguos en vez de ejecutar la IA heredada.
+export const aiWorkout = functions.https.onCall(async () => retired());
+export const aiChat = functions.https.onCall(async () => retired());
+export const parseVoice = functions.https.onCall(async () => retired());
+
+export const syncCalendar = functions.https.onCall(async (request) => {
+  const { events } = request.data;
+  if (!events || !Array.isArray(events)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Eventos requeridos');
+  }
+
+  const calendarLinks = events.map((event: any) => {
+    const date = event.startDate?.replace(/-/g, '');
+    const title = encodeURIComponent(event.title || 'Evento LifeOS');
+    const desc = encodeURIComponent(event.description || '');
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${date}/${date}&details=${desc}`;
+  });
+
+  return {
+    success: true,
+    eventsSynced: events.length,
+    message: `${events.length} eventos generados para Google Calendar.`,
+    calendarLinks,
+  };
+});
+''')
+
+          vercel = Path('vercel.json')
+          vercel.write_text('''{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npx vite build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/ai.ts": { "maxDuration": 30 }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+''')
+
+          test = Path('tests/ai-safety.test.ts')
+          test.write_text('''import assert from 'node:assert/strict';
+import test from 'node:test';
+import { processAIAction, parseVoiceLocally } from '../server/aiService.ts';
+
+test('safe chat fallback never fabricates normal-looking biometrics', async () => {
+  const result = await processAIAction('chat', {
+    messages: [{ role: 'user', content: '¿Cómo está mi salud y mi SpO2?' }],
+    userContext: { latestBiometrics: null },
+  }, '');
+
+  assert.match(result.reply, /no hay biometría reciente disponible/i);
+  assert.doesNotMatch(result.reply, /96%|120\/80|68 BPM|7\.5 h/);
+});
+
+test('safe workout fallback does not invent altitude or biometrics', async () => {
+  const result = await processAIAction('workout', {
+    healthProfile: {},
+    latestLog: null,
+    shiftInfo: {},
+  }, '');
+
+  assert.match(result.summary, /no disponible/i);
+  assert.doesNotMatch(JSON.stringify(result), /4200|96%|120\/80|68 BPM/);
+});
+
+test('voice parser extracts only values explicitly dictated', () => {
+  const result = parseVoiceLocally('Tengo saturación 93 y pulso 71');
+  assert.equal(result.intent, 'health_log');
+  assert.equal(result.data.spO2Pct, 93);
+  assert.equal(result.data.heartRateBpm, 71);
+  assert.equal(result.data.bloodPressureSys, undefined);
+  assert.equal(result.data.weightKg, undefined);
+});
+''')
+
+          # El workflow es temporal: se elimina del commit de saneamiento.
+          Path('.github/workflows/phase1-sanitize.yml').unlink(missing_ok=True)
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tests
+        run: npx --no-install tsx --test tests/**/*.test.ts
+
+      - name: TypeScript
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit sanitized phase
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: complete phase 1 AI safety cleanup"
+          git push origin HEAD:agent/phase1-ai-safety
