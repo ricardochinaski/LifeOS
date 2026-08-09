@@ -2,7 +2,8 @@ name: Phase 1 sanitize
 
 on:
   push:
-    branches: [agent/phase1-ai-safety]
+    branches:
+      - agent/phase1-ai-safety
 
 permissions:
   contents: write
@@ -23,10 +24,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Apply deterministic Phase 1 cleanup
+      - name: Update client settings and remove probes
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import textwrap
 
           settings = Path('src/components/settings/SettingsView.tsx')
           text = settings.read_text()
@@ -36,7 +38,8 @@ jobs:
           marker = 'const AISection: React.FC = () => {'
           if marker not in text:
               raise SystemExit('AISection marker not found')
-          text = text[:text.index(marker)] + '''const AISection: React.FC = () => {
+          replacement = textwrap.dedent('''
+          const AISection: React.FC = () => {
             const { showToast, currentUser } = useLifeOS();
 
             return (
@@ -79,108 +82,110 @@ jobs:
               </div>
             );
           };
-          '''
-          settings.write_text(text)
+          ''')
+          settings.write_text(text[:text.index(marker)] + replacement)
 
           app = Path('src/App.tsx')
-          text = app.read_text()
-          text = text.replace("import { WorkoutPersistenceProbe } from './components/common/WorkoutPersistenceProbe';\n", '')
-          text = text.replace('      <WorkoutPersistenceProbe />\n', '')
-          app.write_text(text)
+          app_text = app.read_text()
+          app_text = app_text.replace("import { WorkoutPersistenceProbe } from './components/common/WorkoutPersistenceProbe';\n", '')
+          app_text = app_text.replace('      <WorkoutPersistenceProbe />\n', '')
+          app.write_text(app_text)
 
           Path('src/components/common/WorkoutPersistenceProbe.tsx').unlink(missing_ok=True)
           Path('src/lib/gemini.ts').unlink(missing_ok=True)
-
-          functions = Path('functions/src/index.ts')
-          functions.write_text('''import * as functions from 'firebase-functions';
-
-const retired = () => {
-  throw new functions.https.HttpsError(
-    'failed-precondition',
-    'Esta función de IA fue retirada. Usa el backend autenticado de LifeOS.',
-  );
-};
-
-// Se conservan temporalmente los nombres para que un futuro deploy de Firebase
-// cierre de forma explícita clientes antiguos en vez de ejecutar la IA heredada.
-export const aiWorkout = functions.https.onCall(async () => retired());
-export const aiChat = functions.https.onCall(async () => retired());
-export const parseVoice = functions.https.onCall(async () => retired());
-
-export const syncCalendar = functions.https.onCall(async (request) => {
-  const { events } = request.data;
-  if (!events || !Array.isArray(events)) {
-    throw new functions.https.HttpsError('invalid-argument', 'Eventos requeridos');
-  }
-
-  const calendarLinks = events.map((event: any) => {
-    const date = event.startDate?.replace(/-/g, '');
-    const title = encodeURIComponent(event.title || 'Evento LifeOS');
-    const desc = encodeURIComponent(event.description || '');
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${date}/${date}&details=${desc}`;
-  });
-
-  return {
-    success: true,
-    eventsSynced: events.length,
-    message: `${events.length} eventos generados para Google Calendar.`,
-    calendarLinks,
-  };
-});
-''')
-
-          vercel = Path('vercel.json')
-          vercel.write_text('''{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "buildCommand": "npx vite build",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/ai.ts": { "maxDuration": 30 }
-  },
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}
-''')
-
-          test = Path('tests/ai-safety.test.ts')
-          test.write_text('''import assert from 'node:assert/strict';
-import test from 'node:test';
-import { processAIAction, parseVoiceLocally } from '../server/aiService.ts';
-
-test('safe chat fallback never fabricates normal-looking biometrics', async () => {
-  const result = await processAIAction('chat', {
-    messages: [{ role: 'user', content: '¿Cómo está mi salud y mi SpO2?' }],
-    userContext: { latestBiometrics: null },
-  }, '');
-
-  assert.match(result.reply, /no hay biometría reciente disponible/i);
-  assert.doesNotMatch(result.reply, /96%|120\/80|68 BPM|7\.5 h/);
-});
-
-test('safe workout fallback does not invent altitude or biometrics', async () => {
-  const result = await processAIAction('workout', {
-    healthProfile: {},
-    latestLog: null,
-    shiftInfo: {},
-  }, '');
-
-  assert.match(result.summary, /no disponible/i);
-  assert.doesNotMatch(JSON.stringify(result), /4200|96%|120\/80|68 BPM/);
-});
-
-test('voice parser extracts only values explicitly dictated', () => {
-  const result = parseVoiceLocally('Tengo saturación 93 y pulso 71');
-  assert.equal(result.intent, 'health_log');
-  assert.equal(result.data.spO2Pct, 93);
-  assert.equal(result.data.heartRateBpm, 71);
-  assert.equal(result.data.bloodPressureSys, undefined);
-  assert.equal(result.data.weightKg, undefined);
-});
-''')
-
-          # El workflow es temporal: se elimina del commit de saneamiento.
-          Path('.github/workflows/phase1-sanitize.yml').unlink(missing_ok=True)
           PY
+
+      - name: Retire legacy Firebase AI callables
+        run: |
+          cat > functions/src/index.ts <<'EOF'
+          import * as functions from 'firebase-functions';
+
+          const retired = () => {
+            throw new functions.https.HttpsError(
+              'failed-precondition',
+              'Esta función de IA fue retirada. Usa el backend autenticado de LifeOS.',
+            );
+          };
+
+          export const aiWorkout = functions.https.onCall(async () => retired());
+          export const aiChat = functions.https.onCall(async () => retired());
+          export const parseVoice = functions.https.onCall(async () => retired());
+
+          export const syncCalendar = functions.https.onCall(async (request) => {
+            const { events } = request.data;
+            if (!events || !Array.isArray(events)) {
+              throw new functions.https.HttpsError('invalid-argument', 'Eventos requeridos');
+            }
+
+            const calendarLinks = events.map((event: any) => {
+              const date = event.startDate?.replace(/-/g, '');
+              const title = encodeURIComponent(event.title || 'Evento LifeOS');
+              const desc = encodeURIComponent(event.description || '');
+              return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${date}/${date}&details=${desc}`;
+            });
+
+            return {
+              success: true,
+              eventsSynced: events.length,
+              message: `${events.length} eventos generados para Google Calendar.`,
+              calendarLinks,
+            };
+          });
+          EOF
+
+      - name: Add Vercel function configuration and safety tests
+        run: |
+          cat > vercel.json <<'EOF'
+          {
+            "$schema": "https://openapi.vercel.sh/vercel.json",
+            "framework": "vite",
+            "buildCommand": "npx vite build",
+            "outputDirectory": "dist",
+            "functions": {
+              "api/ai.ts": { "maxDuration": 30 }
+            },
+            "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+          }
+          EOF
+
+          cat > tests/ai-safety.test.ts <<'EOF'
+          import assert from 'node:assert/strict';
+          import test from 'node:test';
+          import { processAIAction, parseVoiceLocally } from '../server/aiService.ts';
+
+          test('safe chat fallback never fabricates normal-looking biometrics', async () => {
+            const result = await processAIAction('chat', {
+              messages: [{ role: 'user', content: '¿Cómo está mi salud y mi SpO2?' }],
+              userContext: { latestBiometrics: null },
+            }, '');
+
+            assert.match(result.reply, /no hay biometría reciente disponible/i);
+            assert.doesNotMatch(result.reply, /96%|120\/80|68 BPM|7\.5 h/);
+          });
+
+          test('safe workout fallback does not invent altitude or biometrics', async () => {
+            const result = await processAIAction('workout', {
+              healthProfile: {},
+              latestLog: null,
+              shiftInfo: {},
+            }, '');
+
+            assert.match(result.summary, /no disponible/i);
+            assert.doesNotMatch(JSON.stringify(result), /4200|96%|120\/80|68 BPM/);
+          });
+
+          test('voice parser extracts only values explicitly dictated', () => {
+            const result = parseVoiceLocally('Tengo saturación 93 y pulso 71');
+            assert.equal(result.intent, 'health_log');
+            assert.equal(result.data.spO2Pct, 93);
+            assert.equal(result.data.heartRateBpm, 71);
+            assert.equal(result.data.bloodPressureSys, undefined);
+            assert.equal(result.data.weightKg, undefined);
+          });
+          EOF
+
+      - name: Remove temporary workflow from resulting commit
+        run: rm .github/workflows/phase1-sanitize.yml
 
       - name: Install dependencies
         run: npm ci
