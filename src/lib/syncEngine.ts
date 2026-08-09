@@ -150,3 +150,29 @@ export function hasSyncDelta(delta: SyncDelta): boolean {
     (collection) => delta[collection].upserts.length > 0 || delta[collection].deletes.length > 0,
   );
 }
+
+/**
+ * Applies a device delta to a cloud-like snapshot in memory.
+ * This mirrors the upsert/delete semantics used by replayOfflineChanges and is
+ * intentionally side-effect free so multi-device reconciliation can be tested
+ * without Firebase credentials.
+ */
+export function applySyncDeltaToRecord(
+  current: Record<string, unknown>,
+  delta: SyncDelta,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...current };
+
+  for (const collection of SYNC_COLLECTIONS) {
+    const byId = new Map(
+      normalizeStoredCollection(current[collection]).map((item) => [item.id, item]),
+    );
+
+    for (const id of delta[collection].deletes) byId.delete(id);
+    for (const item of delta[collection].upserts) byId.set(item.id, item);
+
+    next[collection] = Array.from(byId.values());
+  }
+
+  return next;
+}

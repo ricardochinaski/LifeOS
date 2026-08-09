@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+def lifeosVersionCode = (System.getenv("LIFEOS_VERSION_CODE") ?: "1").toInteger()
+def lifeosVersionName = System.getenv("LIFEOS_VERSION_NAME") ?: "1.0.0"
+
 android {
     namespace = "com.aselec.lifeos"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +10,8 @@ android {
         applicationId "com.aselec.lifeos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode lifeosVersionCode
+        versionName lifeosVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -22,8 +25,8 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-    
-    // Use Java 17 compatibility (works with Java 25 compiler)
+
+    // Capacitor 8 compiles source with Java 17 compatibility; CI runs on JDK 21.
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

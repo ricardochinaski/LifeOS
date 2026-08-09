@@ -26,9 +26,13 @@ import { scheduleTaskNotifications } from '../utils/notifications';
 import { addDaysToDateOnly, addMonthsToDateOnly, todayLocalDate } from '../lib/dateOnly';
 import {
   diffStoredCollections, getLocalOnlyEntities, isSyncCollectionName, mergeRemoteWithLocalOnly,
-  normalizeStoredCollection, parseSyncBase, SYNC_COLLECTIONS, SYNC_STATE_BY_COLLECTION, syncValuesEqual,
+  normalizeStoredCollection, SYNC_COLLECTIONS, SYNC_STATE_BY_COLLECTION, syncValuesEqual,
   type SyncCollectionName, type SyncDataset,
 } from '../lib/syncEngine';
+import {
+  CURATED_CONTENT_KEY, STORAGE_KEY, isPlainRecord, mergeMissingSeeds, persistSnapshotIfChanged,
+  readStoredRecord, readSyncBase, removeUndefinedFields, updateSyncBasePart,
+} from '../lib/lifeosPersistence';
 
 interface LifeOSContextType {
   activeTab: TabType;
@@ -176,49 +180,7 @@ interface LifeOSContextType {
   updateAppSettings: (partial: Partial<AppCustomSettings>) => void;
 }
 
-const STORAGE_KEY = 'lifeos_local_v1';
-const CURATED_CONTENT_KEY = 'lifeos_curated_content_2026_07_29';
-const SYNC_BASE_KEY_PREFIX = 'lifeos_sync_base_v2_';
-
-const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-const readStoredRecord = (raw: string | null): Record<string, unknown> => {
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return isPlainRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-
-const syncBaseKey = (uid: string) => `${SYNC_BASE_KEY_PREFIX}${uid}`;
-const readSyncBase = (uid: string): Record<string, unknown> | null =>
-  parseSyncBase(localStorage.getItem(syncBaseKey(uid)));
-
-const updateSyncBasePart = (uid: string, key: string, value: unknown) => {
-  const base = readSyncBase(uid) || {};
-  localStorage.setItem(syncBaseKey(uid), JSON.stringify({ ...base, [key]: value }));
-};
-
 const LifeOSContext = createContext<LifeOSContextType | undefined>(undefined);
-
-const removeUndefinedFields = (value: any): any => {
-  if (Array.isArray(value)) {
-    return value.map(removeUndefinedFields);
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, entryValue]) => entryValue !== undefined)
-        .map(([key, entryValue]) => [key, removeUndefinedFields(entryValue)])
-    );
-  }
-
-  return value;
-};
 
 // Firestore subcollection helpers
 const col = (uid: string, sub: string) => collection(db, 'users', uid, sub);
@@ -231,12 +193,6 @@ const DEFAULT_SYNC_STATE: SyncState = { tasks: 'idle', habits: 'idle', habitLogs
 const curatedTasks = initialTasks.filter((task) => task.id.startsWith('task_home_') || task.id.startsWith('task_personal_') || task.id.startsWith('task_finance_subscription_'));
 const curatedHabits = initialHabits.filter((habit) => habit.id.startsWith('habit_core_'));
 const curatedBooks = initialBooks.filter((book) => book.id.startsWith('book_core_'));
-
-const mergeMissingSeeds = <T extends { id: string }>(current: T[] | undefined, seeds: T[]) => {
-  const base = Array.isArray(current) ? current : [];
-  const existing = new Set(base.map((item) => item.id));
-  return [...base, ...seeds.filter((item) => !existing.has(item.id))];
-};
 
 export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -661,11 +617,10 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         books, readingLogs, bookNotes, readingGroups, readingSessions, projects,
         shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings,
       };
-      const serialized = JSON.stringify(dataToSave);
-      if (serialized !== lastPersistedSnapshot.current) {
-        localStorage.setItem(STORAGE_KEY, serialized);
-        lastPersistedSnapshot.current = serialized;
-      }
+      lastPersistedSnapshot.current = persistSnapshotIfChanged(
+        dataToSave,
+        lastPersistedSnapshot.current,
+      );
     } catch (e) {
       console.error('Error saving to localStorage:', e);
     }
