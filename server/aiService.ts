@@ -42,7 +42,7 @@ function normalizeMessages(messages: unknown): { role: 'user' | 'assistant'; con
   return messages
     .slice(-MAX_MESSAGES)
     .map((message: any) => ({
-      role: message?.role === 'assistant' ? 'assistant' : 'user',
+      role: (message?.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
       content: typeof message?.content === 'string' ? message.content.slice(0, MAX_MESSAGE_CHARS) : '',
     }))
     .filter((message) => message.content.trim().length > 0);
