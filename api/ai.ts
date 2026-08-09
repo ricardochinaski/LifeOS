@@ -1,5 +1,5 @@
 import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
-import { processAIAction, type AIAction } from '../server/aiService.ts';
+import { processAIAction, type AIAction } from '../server/aiService';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
