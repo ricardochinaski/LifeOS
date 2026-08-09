@@ -10,11 +10,14 @@ import {
 const emptySnapshot = (): Record<string, unknown> =>
   Object.fromEntries(SYNC_COLLECTIONS.map((collection) => [collection, []]));
 
+const cloneSnapshot = (snapshot: Record<string, unknown>): Record<string, unknown> =>
+  structuredClone(snapshot);
+
 const ids = (snapshot: Record<string, unknown>, collection: string) =>
   normalizeStoredCollection(snapshot[collection]).map((item) => item.id).sort();
 
 test('two devices converge when they edit independent entities while offline', () => {
-  const cloud = {
+  const cloud: Record<string, unknown> = {
     ...emptySnapshot(),
     tasks: [
       { id: 'task-a', title: 'A', status: 'todo' },
@@ -23,10 +26,10 @@ test('two devices converge when they edit independent entities while offline', (
     readingSessions: [],
   };
 
-  const deviceABase = structuredClone(cloud);
-  const deviceBBase = structuredClone(cloud);
+  const deviceABase = cloneSnapshot(cloud);
+  const deviceBBase = cloneSnapshot(cloud);
 
-  const deviceA = structuredClone(deviceABase);
+  const deviceA = cloneSnapshot(deviceABase);
   deviceA.tasks = [
     { id: 'task-a', title: 'A editada en Android', status: 'in_progress' },
     { id: 'task-b', title: 'B', status: 'todo' },
@@ -37,7 +40,7 @@ test('two devices converge when they edit independent entities while offline', (
 
   const afterA = applySyncDeltaToRecord(cloud, diffStoredCollections(deviceABase, deviceA));
 
-  const deviceB = structuredClone(deviceBBase);
+  const deviceB = cloneSnapshot(deviceBBase);
   deviceB.tasks = [{ id: 'task-a', title: 'A', status: 'todo' }];
   deviceB.readingGroups = [
     { id: 'group-b', name: 'Grupo B', bookId: 'book-a' },
@@ -58,7 +61,7 @@ test('two devices converge when they edit independent entities while offline', (
 });
 
 test('offline deletion and unrelated cloud additions survive the same reconciliation', () => {
-  const base = {
+  const base: Record<string, unknown> = {
     ...emptySnapshot(),
     bookNotes: [
       { id: 'note-1', title: 'Eliminar' },
@@ -66,10 +69,10 @@ test('offline deletion and unrelated cloud additions survive the same reconcilia
     ],
   };
 
-  const deviceOffline = structuredClone(base);
+  const deviceOffline = cloneSnapshot(base);
   deviceOffline.bookNotes = [{ id: 'note-2', title: 'Conservar' }];
 
-  const cloudAdvanced = structuredClone(base);
+  const cloudAdvanced = cloneSnapshot(base);
   cloudAdvanced.bookNotes = [
     ...normalizeStoredCollection(cloudAdvanced.bookNotes),
     { id: 'note-cloud', title: 'Creada en web' },
@@ -84,14 +87,14 @@ test('offline deletion and unrelated cloud additions survive the same reconcilia
 });
 
 test('same-entity conflict has deterministic last-replayed-device semantics', () => {
-  const base = {
+  const base: Record<string, unknown> = {
     ...emptySnapshot(),
     tasks: [{ id: 'task-1', title: 'Original', status: 'todo' }],
   };
 
-  const web = structuredClone(base);
+  const web = cloneSnapshot(base);
   web.tasks = [{ id: 'task-1', title: 'Edición web', status: 'todo' }];
-  const android = structuredClone(base);
+  const android = cloneSnapshot(base);
   android.tasks = [{ id: 'task-1', title: 'Edición Android', status: 'todo' }];
 
   const afterWeb = applySyncDeltaToRecord(base, diffStoredCollections(base, web));
