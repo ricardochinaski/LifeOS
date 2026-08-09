@@ -1,28 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
-import {
-  requestNotificationPermission,
-  getNotificationPermission,
-  sendLocalNotification,
-  scheduleShiftNotifications,
-  initNotificationChannels,
-  NotificationSettings,
-  DEFAULT_NOTIFICATION_SETTINGS
-} from '../../utils/notifications';
+import { buildDailyAutomationPlan, DEFAULT_DAILY_AUTOMATION_SETTINGS, type DailyAutomationSettings } from '../../lib/dailyAutomation';
 import { isNative } from '../../lib/native';
 import {
+  cancelDailyAutomationNotifications,
+  getNotificationPermissionAsync,
+  initNotificationChannels,
+  loadDailyAutomationSettings,
+  requestNotificationPermission,
+  saveDailyAutomationSettings,
+  sendLocalNotification,
+  syncDailyAutomationNotifications,
+} from '../../utils/notifications';
+import {
   Bell,
+  BellOff,
   BellRing,
   CheckCircle2,
-  X,
-  ShieldCheck,
-  AlertTriangle,
-  Clock,
-  HeartPulse,
-  Briefcase,
-  Sparkles,
   CheckSquare,
-  Flame
+  Clock3,
+  Flame,
+  MoonStar,
+  RefreshCw,
+  ShieldCheck,
+  Sunrise,
+  SunMedium,
+  X,
 } from 'lucide-react';
 
 interface PushNotificationsModalProps {
@@ -30,274 +33,244 @@ interface PushNotificationsModalProps {
   onClose: () => void;
 }
 
-export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({
-  isOpen,
-  onClose
-}) => {
-  const { showToast, shiftInfo, shiftConfig, tasks, habits, addTask, addHabit } = useLifeOS();
+export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({ isOpen, onClose }) => {
+  const { showToast, tasks, habits, habitLogs, shiftConfig } = useLifeOS();
   const [permission, setPermission] = useState<NotificationPermission>('default');
-  const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
+  const [settings, setSettings] = useState<DailyAutomationSettings>(DEFAULT_DAILY_AUTOMATION_SETTINGS);
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      setPermission(getNotificationPermission());
-    }
+    if (!isOpen) return;
+    Promise.all([getNotificationPermissionAsync(), loadDailyAutomationSettings()])
+      .then(([permissionState, savedSettings]) => {
+        setPermission(permissionState);
+        setSettings(savedSettings);
+      })
+      .catch(() => undefined);
   }, [isOpen]);
+
+  const preview = useMemo(() => buildDailyAutomationPlan({
+    tasks,
+    habits,
+    habitLogs,
+    shiftConfig,
+    settings: { ...settings, enabled: true },
+  }).slice(0, 4), [tasks, habits, habitLogs, shiftConfig, settings]);
 
   if (!isOpen) return null;
 
-  const handleEnableNotifications = async () => {
-    setIsProcessing(true);
-    try {
-      const granted = await requestNotificationPermission();
-      setPermission(getNotificationPermission());
-      if (granted) {
-        setSettings(prev => ({ ...prev, enabled: true }));
-        await initNotificationChannels();
-        await scheduleShiftNotifications(
-          shiftInfo.dayInPhase,
-          shiftInfo.phase === 'rest',
-          shiftConfig.workDays,
-          shiftConfig.restDays
-        );
-        await sendLocalNotification(
-          'Notificaciones Activadas',
-          'Recibirás recordatorios de turnos 14x14, SpO2 e hidratación.'
-        );
-        showToast('Notificaciones activadas. Recibirás alertas diarias.');
-      } else {
-        showToast('Debes permitir las notificaciones para recibir alertas.');
-      }
-    } finally {
-      setIsProcessing(false);
-    }
+  const syncNow = async (nextSettings = settings) => {
+    const result = await syncDailyAutomationNotifications({
+      tasks,
+      habits,
+      habitLogs,
+      shiftConfig,
+      settings: nextSettings,
+    });
+    return result.scheduled;
   };
 
-  const handleTestNotification = async () => {
+  const persist = async (next: DailyAutomationSettings, reschedule = true) => {
+    setSettings(next);
+    const saved = await saveDailyAutomationSettings(next);
+    setSettings(saved);
+    if (reschedule && saved.enabled) await syncNow(saved);
+    return saved;
+  };
+
+  const handleEnable = async () => {
     if (!isNative()) {
-      showToast('Notificaciones solo disponibles en Android.');
+      showToast('La automatización de notificaciones está disponible en la app Android.');
       return;
     }
     setIsProcessing(true);
     try {
-      const ok = await sendLocalNotification(
-        'Alerta de Salud en Altura',
-        'Mide tu SpO2 y toma 3.5L de agua hoy.',
-        'health_alerts'
-      );
-      showToast(ok ? 'Notificación de prueba enviada' : 'Error al enviar notificación');
+      const granted = await requestNotificationPermission();
+      setPermission(await getNotificationPermissionAsync());
+      if (!granted) {
+        showToast('Android debe permitir notificaciones para activar el Daily Plan.');
+        return;
+      }
+      await initNotificationChannels();
+      const next = await persist({ ...settings, enabled: true }, false);
+      const scheduled = await syncNow(next);
+      showToast(`Automatización diaria activada: ${scheduled} recordatorios preparados.`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleScheduleReminders = async () => {
-    if (!isNative()) return;
+  const handleDisable = async () => {
     setIsProcessing(true);
     try {
-      await initNotificationChannels();
-      await scheduleShiftNotifications(
-        shiftInfo.dayInPhase,
-        shiftInfo.phase === 'rest',
-        shiftConfig.workDays,
-        shiftConfig.restDays
-      );
-      showToast('Recordatorios programados.');
+      await persist({ ...settings, enabled: false }, false);
+      await cancelDailyAutomationNotifications();
+      showToast('Automatización diaria desactivada.');
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const handleApply = async () => {
+    setIsProcessing(true);
+    try {
+      const saved = await persist(settings, false);
+      const scheduled = saved.enabled ? await syncNow(saved) : 0;
+      showToast(saved.enabled ? `${scheduled} recordatorios diarios actualizados.` : 'Horarios guardados. Activa la automatización cuando quieras.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setIsProcessing(true);
+    try {
+      const ok = await sendLocalNotification(
+        'LifeOS Daily Plan',
+        'Notificación de prueba. Tus recordatorios se construyen con tus tareas, hábitos y turno configurados.',
+        'daily_plan',
+        { lifeosAutomationTest: true, targetTab: 'dashboard' },
+      );
+      showToast(ok ? 'Notificación de prueba enviada.' : 'No se pudo enviar la notificación de prueba.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const update = <K extends keyof DailyAutomationSettings>(key: K, value: DailyAutomationSettings[K]) => {
+    setSettings((current) => ({ ...current, [key]: value }));
+  };
+
+  const slotRow = (
+    icon: React.ReactNode,
+    title: string,
+    description: string,
+    enabledKey: 'morningEnabled' | 'middayEnabled' | 'eveningEnabled',
+    timeKey: 'morningTime' | 'middayTime' | 'eveningTime',
+  ) => (
+    <div className="flex items-center gap-3 rounded-2xl border border-slate-700/80 bg-slate-800/60 p-3">
+      <div className="rounded-xl bg-slate-900 p-2 text-emerald-300">{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-bold text-white">{title}</p>
+        <p className="text-[10px] leading-relaxed text-slate-400">{description}</p>
+      </div>
+      <input
+        type="time"
+        value={settings[timeKey]}
+        disabled={!settings[enabledKey]}
+        onChange={(event) => update(timeKey, event.target.value)}
+        className="w-[92px] rounded-xl border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white disabled:opacity-40"
+      />
+      <input
+        type="checkbox"
+        checked={settings[enabledKey]}
+        onChange={(event) => update(enabledKey, event.target.checked)}
+        className="h-4 w-4 accent-emerald-500"
+      />
+    </div>
+  );
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-md"
       style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}
     >
-      <div className="w-full max-w-lg p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-5 text-white animate-scale-in">
+      <div className="w-full max-w-lg space-y-5 rounded-3xl border border-slate-800 bg-slate-900 p-5 text-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-              <BellRing className="w-6 h-6" />
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/15 p-3 text-emerald-300">
+              <BellRing className="h-6 w-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-400">
-                  Alertas LifeOS
-                </span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                  permission === 'granted'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                }`}>
-                  {permission === 'granted' ? 'Activo' : 'Requiere Permiso'}
-                </span>
-              </div>
-              <h2 className="text-lg font-black text-white">Notificaciones Push</h2>
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">Fase 4.4</span>
+              <h2 className="text-lg font-black">Automatización diaria</h2>
             </div>
           </div>
+          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5" /></button>
+        </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
+        <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+              <div>
+                <p className="text-xs font-bold">Automatización local y contextual</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                  LifeOS prepara un horizonte móvil de 7 días y lo recalcula cuando cambian tus tareas, hábitos o turno. No inventa biometría ni objetivos de salud.
+                </p>
+              </div>
+            </div>
+            <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${permission === 'granted' ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300' : 'border-amber-500/30 bg-amber-500/15 text-amber-300'}`}>
+              {permission === 'granted' ? 'Permiso OK' : 'Sin permiso'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {settings.enabled ? (
+            <button onClick={handleDisable} disabled={isProcessing} className="flex items-center justify-center gap-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 py-3 text-xs font-black text-rose-300">
+              <BellOff className="h-4 w-4" /> Desactivar
+            </button>
+          ) : (
+            <button onClick={handleEnable} disabled={isProcessing} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3 text-xs font-black text-slate-950">
+              <Bell className="h-4 w-4" /> Activar
+            </button>
+          )}
+          <button onClick={handleTest} disabled={isProcessing || permission !== 'granted'} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-800 py-3 text-xs font-bold text-white disabled:opacity-40">
+            <BellRing className="h-4 w-4" /> Probar
           </button>
         </div>
 
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 space-y-1.5">
-          <p className="font-bold flex items-center gap-1.5 text-amber-300">
-            <Sparkles className="w-4 h-4 text-amber-400" /> Notificaciones Nativas Android
-          </p>
-          <p className="text-[11px] text-slate-300 leading-relaxed">
-            Alertas directas en tu teléfono. Recordatorios de turno 14x14, chequeo de SpO2, hidratación y hábitos diarios.
-          </p>
-        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Ritmo diario</p>
+          {slotRow(<Sunrise className="h-4 w-4" />, 'Inicio del día', 'Turno actual, atrasos y primera prioridad.', 'morningEnabled', 'morningTime')}
+          {slotRow(<SunMedium className="h-4 w-4" />, 'Chequeo de foco', 'Tareas prioritarias y hábitos previstos aún por revisar.', 'middayEnabled', 'middayTime')}
+          {slotRow(<MoonStar className="h-4 w-4" />, 'Cierre y preparación', 'Cierre del día y primera prioridad del día siguiente.', 'eveningEnabled', 'eveningTime')}
 
-        {permission !== 'granted' ? (
-          <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-3">
-            <div className="flex items-center gap-3 text-amber-400">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-              <p className="text-xs font-medium">
-                Las notificaciones están desactivadas.
-              </p>
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-700/80 bg-slate-800/60 p-3">
+            <div className="rounded-xl bg-slate-900 p-2 text-amber-300"><Clock3 className="h-4 w-4" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold">Cambio Faena / Descanso</p>
+              <p className="text-[10px] text-slate-400">Aviso solo cuando el día siguiente cambia de fase.</p>
             </div>
-
-            <button
-              onClick={handleEnableNotifications}
-              disabled={isProcessing}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 cursor-pointer"
-            >
-              <Bell className="w-4 h-4 text-slate-950" />
-              <span>Activar Notificaciones</span>
-            </button>
-          </div>
-        ) : (
-          <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span>Notificaciones Activas</span>
-              </div>
-              <button
-                onClick={handleTestNotification}
-                disabled={isProcessing}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold"
-              >
-                Probar
-              </button>
-            </div>
-            <button
-              onClick={handleScheduleReminders}
-              disabled={isProcessing}
-              className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold flex items-center justify-center gap-2"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              Programar Recordatorios Diarios
-            </button>
-          </div>
-        )}
-
-        <div className="space-y-3 text-xs">
-          <label className="font-bold uppercase tracking-wider text-slate-400">Alertas Programadas</label>
-          
-          <div className="space-y-2">
-            <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Briefcase className="w-4 h-4 text-blue-400" />
-                <div>
-                  <p className="font-bold text-white">Cambio de Turno 14x14</p>
-                  <p className="text-[10px] text-slate-400">Aviso 24h antes de cambio faena/descanso</p>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.shiftAlerts}
-                onChange={e => setSettings(prev => ({ ...prev, shiftAlerts: e.target.checked }))}
-                className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
-              />
-            </div>
-
-            <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <HeartPulse className="w-4 h-4 text-rose-400" />
-                <div>
-                  <p className="font-bold text-white">SpO2 y Signos Vitales</p>
-                  <p className="text-[10px] text-slate-400">Recordatorio diario 8 AM + hidratación 1 PM</p>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.healthAlerts}
-                onChange={e => setSettings(prev => ({ ...prev, healthAlerts: e.target.checked }))}
-                className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
-              />
-            </div>
-
-            <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Clock className="w-4 h-4 text-emerald-400" />
-                <div>
-                  <p className="font-bold text-white">Hábitos Diarios</p>
-                  <p className="text-[10px] text-slate-400">Recordatorio a las {settings.reminderTime} hrs</p>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.habitReminders}
-                onChange={e => setSettings(prev => ({ ...prev, habitReminders: e.target.checked }))}
-                className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
-              />
-            </div>
+            <input type="time" value={settings.shiftAlertTime} disabled={!settings.shiftChangeAlerts} onChange={(event) => update('shiftAlertTime', event.target.value)} className="w-[92px] rounded-xl border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white disabled:opacity-40" />
+            <input type="checkbox" checked={settings.shiftChangeAlerts} onChange={(event) => update('shiftChangeAlerts', event.target.checked)} className="h-4 w-4 accent-amber-500" />
           </div>
         </div>
 
-        {/* Tasks with notifications */}
-        <div className="space-y-2 text-xs">
-          <label className="font-bold uppercase tracking-wider text-slate-400">Tareas con Alarma</label>
-          {tasks.filter(t => t.notifyAt && t.status !== 'completed').map(t => (
-            <div key={t.id} className="p-2.5 rounded-2xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <CheckSquare className="w-4 h-4 text-sky-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="font-bold text-white text-xs truncate">{t.title}</p>
-                  <p className="text-[10px] text-slate-400">⏰ {t.notifyAt}{t.dueDate ? ` • ${t.dueDate}` : ''}</p>
-                </div>
+        <button onClick={handleApply} disabled={isProcessing} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 py-3 text-xs font-black text-slate-950 disabled:opacity-50">
+          <RefreshCw className={`h-4 w-4 ${isProcessing ? 'animate-spin' : ''}`} /> Guardar y recalcular
+        </button>
+
+        <div className="space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Próximos recordatorios</p>
+          {preview.length === 0 ? (
+            <p className="rounded-2xl bg-slate-800/50 p-3 text-[11px] text-slate-400">No hay recordatorios futuros dentro del horizonte actual.</p>
+          ) : preview.map((item) => (
+            <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-800/50 px-3 py-2.5 text-xs">
+              <div className="min-w-0">
+                <p className="truncate font-bold text-white">{item.title}</p>
+                <p className="truncate text-[10px] text-slate-400">{item.body}</p>
               </div>
+              <span className="shrink-0 text-[10px] font-bold text-emerald-300">{item.date.slice(5)} · {item.time}</span>
             </div>
           ))}
-          {tasks.filter(t => t.notifyAt && t.status !== 'completed').length === 0 && (
-            <p className="text-[10px] text-slate-500 italic">Sin tareas con alarma. Al crear/editar una tarea puedes activar recordatorio.</p>
-          )}
         </div>
 
-        {/* Habits with notifications */}
-        <div className="space-y-2 text-xs">
-          <label className="font-bold uppercase tracking-wider text-slate-400">Hábitos con Alarma</label>
-          {habits.filter(h => h.notifyAt).map(h => (
-            <div key={h.id} className="p-2.5 rounded-2xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Flame className="w-4 h-4 text-orange-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="font-bold text-white text-xs truncate">{h.title}</p>
-                  <p className="text-[10px] text-slate-400">⏰ {h.notifyAt} • Diario</p>
-                </div>
-              </div>
-            </div>
-          ))}
-          {habits.filter(h => h.notifyAt).length === 0 && (
-            <p className="text-[10px] text-slate-500 italic">Sin hábitos con alarma. Al crear un hábito puedes activar recordatorio.</p>
-          )}
+        <div className="grid grid-cols-2 gap-3 border-t border-slate-800 pt-4 text-xs">
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 font-bold text-slate-300"><CheckSquare className="h-4 w-4 text-sky-400" /> Tareas con alarma</p>
+            <p className="text-[11px] text-slate-500">{tasks.filter((task) => task.notifyAt && task.status !== 'completed').length} configuradas</p>
+          </div>
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 font-bold text-slate-300"><Flame className="h-4 w-4 text-orange-400" /> Hábitos con alarma</p>
+            <p className="text-[11px] text-slate-500">{habits.filter((habit) => habit.notifyAt).length} configurados</p>
+          </div>
         </div>
 
-        <div className="border-t border-slate-800 pt-3 flex items-center justify-between text-[11px] text-slate-400">
-          <span>Local Notifications API</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold"
-          >
-            Cerrar
-          </button>
+        <div className="flex items-center justify-between text-[10px] text-slate-500">
+          <span>{isNative() ? 'Android · Local Notifications' : 'Vista web · configuración disponible en Android'}</span>
+          {settings.enabled && <span className="flex items-center gap-1 text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" /> Activa</span>}
         </div>
       </div>
     </div>
