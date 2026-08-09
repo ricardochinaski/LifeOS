@@ -1,0 +1,89 @@
+name: One-shot workout persistence fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/one-shot-workout-persistence.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-workout-persistence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Patch LifeOSContext safely
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/context/LifeOSContext.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  "    projects: setProjects, healthLogs: setHealthLogs,\n  };",
+                  "    projects: setProjects, healthLogs: setHealthLogs, workoutLogs: setWorkoutLogs,\n  };",
+              ),
+              (
+                  "        if (parsed.healthLogs) setHealthLogs(parsed.healthLogs);\n        if (parsed.appSettings) setAppSettings(parsed.appSettings);",
+                  "        if (parsed.healthLogs) setHealthLogs(parsed.healthLogs);\n        if (parsed.workoutLogs) setWorkoutLogs(parsed.workoutLogs);\n        if (parsed.appSettings) setAppSettings(parsed.appSettings);",
+              ),
+              (
+                  "      books: 'library', readingLogs: 'library', bookNotes: 'library', healthLogs: 'health',",
+                  "      books: 'library', readingLogs: 'library', bookNotes: 'library', healthLogs: 'health', workoutLogs: 'health',",
+              ),
+              (
+                  "        tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, appSettings",
+                  "        tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings",
+              ),
+              (
+                  "  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, appSettings]);",
+                  "  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings]);",
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one match, found {count}: {old[:90]}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+          workflow = Path('.github/workflows/one-shot-workout-persistence.yml')
+          workflow.unlink()
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/context/LifeOSContext.tsx .github/workflows/one-shot-workout-persistence.yml
+          git diff --cached --check
+          git commit -m "fix: persist and sync workout logs"
+          git push origin HEAD:main
