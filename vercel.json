@@ -4,7 +4,7 @@
   "buildCommand": "npx vite build",
   "outputDirectory": "dist",
   "functions": {
-    "api/ai.ts": { "maxDuration": 30 }
+    "api/ai.js": { "maxDuration": 30 }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
