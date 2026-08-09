@@ -7,6 +7,7 @@ import { ShiftCalibrationModal } from './components/common/ShiftCalibrationModal
 import { AICopilotModal } from './components/common/AICopilotModal';
 import { VoiceCommandModal } from './components/common/VoiceCommandModal';
 import { CommandPalette } from './components/common/CommandPalette';
+import { WorkoutPersistenceProbe } from './components/common/WorkoutPersistenceProbe';
 import { GoogleCalendarSyncModal } from './components/integrations/GoogleCalendarSyncModal';
 import { PushNotificationsModal } from './components/integrations/PushNotificationsModal';
 import { Bot } from 'lucide-react';
@@ -53,6 +54,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="lifeos-shell min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors selection:bg-emerald-500 selection:text-white pb-[calc(5rem+env(safe-area-inset-bottom,0px))] relative">
+      <WorkoutPersistenceProbe />
       <Navbar />
       <MainContent />
       <QuickCaptureModal />
