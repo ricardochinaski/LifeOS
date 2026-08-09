@@ -1,5 +1,6 @@
 const LIFEOS_STORAGE_KEY = 'lifeos_local_v1';
 const WIDGET_STORAGE_KEY = 'lifeos_widget_config';
+const LEGACY_AI_SECRET_KEYS = ['gemini_api_key', 'deepseek_api_key'] as const;
 
 const ARRAY_KEYS = [
   'tasks',
@@ -27,6 +28,14 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export function sanitizePersistedState(): void {
+  try {
+    for (const key of LEGACY_AI_SECRET_KEYS) {
+      localStorage.removeItem(key);
+    }
+  } catch (error) {
+    console.error('LifeOS: legacy browser AI secrets could not be removed.', error);
+  }
+
   try {
     const raw = localStorage.getItem(LIFEOS_STORAGE_KEY);
     if (raw) {
