@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  diffStoredCollections,
   getLocalOnlyEntities,
+  hasSyncDelta,
   mergeRemoteWithLocalOnly,
   normalizeStoredCollection,
   SYNC_COLLECTIONS,
@@ -33,6 +35,31 @@ test('first-device reconciliation preserves cloud versions and uploads only loca
     { id: 'local-only', value: 2 },
   ]);
   assert.deepEqual(getLocalOnlyEntities(remote, local), [{ id: 'local-only', value: 2 }]);
+});
+
+test('offline delta detection replays edits, additions and deletions after sign-in', () => {
+  const base = {
+    tasks: [
+      { id: 'edited', title: 'Antes' },
+      { id: 'deleted', title: 'Borrar' },
+    ],
+  };
+  const current = {
+    tasks: [
+      { id: 'edited', title: 'Después' },
+      { id: 'created', title: 'Nueva' },
+    ],
+  };
+
+  const delta = diffStoredCollections(base, current);
+  assert.deepEqual(delta.tasks.upserts, [
+    { id: 'edited', title: 'Después' },
+    { id: 'created', title: 'Nueva' },
+  ]);
+  assert.deepEqual(delta.tasks.deletes, ['deleted']);
+  assert.equal(hasSyncDelta(delta), true);
+  assert.equal(delta.readingGroups.upserts.length, 0);
+  assert.equal(delta.readingSessions.deletes.length, 0);
 });
 
 test('stored collections ignore malformed values instead of feeding them into Firestore', () => {
