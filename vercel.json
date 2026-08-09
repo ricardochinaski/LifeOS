@@ -1,6 +1,10 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "buildCommand": "npx vite build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/ai.js": { "maxDuration": 30 }
+  },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

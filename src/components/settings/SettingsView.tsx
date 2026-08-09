@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
-import { getGeminiApiKey, setGeminiApiKey } from '../../lib/gemini';
 import {
   Settings,
   Palette,
@@ -30,10 +29,6 @@ import {
   Sliders,
   ChevronRight,
   Bot,
-  Key,
-  Eye,
-  EyeOff,
-  Zap
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -641,84 +636,46 @@ export const SettingsView: React.FC = () => {
   );
 };
 
-const AISection: React.FC = () => {
-  const { showToast } = useLifeOS();
-  const [apiKey, setApiKey] = useState(getGeminiApiKey());
-  const [showKey, setShowKey] = useState(false);
 
-  const handleSaveKey = () => {
-    setGeminiApiKey(apiKey.trim());
-    showToast('API Key de Gemini guardada.');
-  };
+const AISection: React.FC = () => {
+  const { showToast, currentUser } = useLifeOS();
 
   return (
     <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-6 animate-fade-in">
       <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-        <div className="p-2.5 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
-          <Bot className="w-5 h-5" />
+        <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+          <ShieldCheck className="w-5 h-5" />
         </div>
         <div>
-          <h2 className="text-lg font-black text-slate-900 dark:text-white">Gemini AI (Gratuito)</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">API Key gratuita de Google para Copilot, Voz y Rutinas</p>
+          <h2 className="text-lg font-black text-slate-900 dark:text-white">IA LifeOS · Backend seguro</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Copilot, voz y rutinas pasan por el backend de LifeOS; no se guardan claves de Gemini en el navegador.</p>
         </div>
       </div>
 
-      <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-xs text-blue-200 space-y-2">
-        <p className="font-bold flex items-center gap-2 text-blue-300">
-          <Zap className="w-4 h-4" /> ¿Cómo obtener tu API Key gratuita?
-        </p>
-        <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-300 leading-relaxed">
-          <li>Ve a <a href="https://aistudio.google.com/apikey" className="text-blue-400 underline" target="_blank">aistudio.google.com/apikey</a></li>
-          <li>Inicia sesión con tu cuenta Google</li>
-          <li>Haz clic en <strong>Create API Key</strong></li>
-          <li>Copia la key y pégala aquí abajo</li>
-        </ol>
-        <p className="text-[11px] text-slate-400 mt-2">
-          Gemini 3.1 Flash Lite es <strong>completamente gratuito</strong> con 60 requests/minuto. Sin necesidad de tarjeta de crédito.
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Gemini API Key</label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              placeholder="AIzaSy..."
-              className="w-full p-3 pr-10 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-            >
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <button
-            onClick={handleSaveKey}
-            className="px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-2"
-          >
-            <Key className="w-4 h-4" />
-            Guardar
-          </button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
+          <p className="text-xs font-black text-emerald-700 dark:text-emerald-300 flex items-center gap-2"><Cloud className="w-4 h-4" /> Servicio de IA</p>
+          <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-300">{currentUser ? 'Sesión Google activa. Las solicitudes pueden autenticarse contra el backend.' : 'Sin sesión Google: LifeOS usa un fallback local seguro y no envía datos a Gemini.'}</p>
+        </div>
+        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30">
+          <p className="text-xs font-black text-blue-700 dark:text-blue-300 flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> Privacidad</p>
+          <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-300">La clave del proveedor se administra exclusivamente en el entorno del servidor. Los datos ausentes no se completan con biometría ficticia.</p>
         </div>
       </div>
 
       <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2 text-xs">
-        <p className="font-bold text-slate-700 dark:text-slate-300">Funcionalidades con Gemini AI:</p>
+        <p className="font-bold text-slate-700 dark:text-slate-300">Funciones protegidas por la misma capa:</p>
         <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-          <p><Bot className="w-3 h-3 inline mr-1 text-blue-400" /> Copilot IA - Asistente inteligente de turno</p>
-          <p><Sparkles className="w-3 h-3 inline mr-1 text-amber-400" /> Comandos de Voz - Dictado inteligente</p>
-          <p><HeartPulse className="w-3 h-3 inline mr-1 text-rose-400" /> Planificador de Rutinas - Ejercicios personalizados</p>
+          <p><Bot className="w-3 h-3 inline mr-1 text-blue-400" /> Copilot IA</p>
+          <p><Sparkles className="w-3 h-3 inline mr-1 text-amber-400" /> Interpretación de comandos de voz</p>
+          <p><HeartPulse className="w-3 h-3 inline mr-1 text-rose-400" /> Planificador de rutinas</p>
         </div>
       </div>
 
       <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-slate-600 dark:text-slate-300 space-y-3">
-        <p className="font-bold text-amber-700 dark:text-amber-300">Privacidad de IA</p>
-        <p>La clave permanece solo en este dispositivo y nunca se incluye en backups ni en Firestore. Las consultas que envíes al Copilot se procesan con Gemini.</p>
-        <div className="flex flex-wrap gap-2"><button onClick={() => { setGeminiApiKey(''); setApiKey(''); showToast('API Key eliminada de este dispositivo.'); }} className="rounded-xl border border-rose-500/30 px-3 py-2 text-[10px] font-bold text-rose-600 dark:text-rose-300">Eliminar API Key</button><button onClick={() => { localStorage.removeItem('lifeos_chat_messages'); showToast('Historial del Copilot eliminado.'); }} className="rounded-xl border border-slate-300 px-3 py-2 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:text-slate-300">Borrar historial Copilot</button></div>
+        <p className="font-bold text-amber-700 dark:text-amber-300">Datos y seguridad</p>
+        <p>LifeOS limita el contexto enviado al asistente y trata cualquier biometría faltante como “no disponible”. Si el backend de IA no está configurado o no responde, se usa un fallback local sin inventar métricas.</p>
+        <button onClick={() => { localStorage.removeItem('lifeos_chat_messages'); showToast('Historial del Copilot eliminado.'); }} className="rounded-xl border border-slate-300 px-3 py-2 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:text-slate-300">Borrar historial Copilot</button>
       </div>
     </div>
   );
