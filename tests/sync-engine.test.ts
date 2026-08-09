@@ -6,6 +6,7 @@ import {
   hasSyncDelta,
   mergeRemoteWithLocalOnly,
   normalizeStoredCollection,
+  parseSyncBase,
   SYNC_COLLECTIONS,
   SYNC_STATE_BY_COLLECTION,
 } from '../src/lib/syncEngine.ts';
@@ -17,6 +18,15 @@ test('every sync collection has a sync-state mapping including reading groups an
   }
   assert.equal(SYNC_STATE_BY_COLLECTION.readingGroups, 'library');
   assert.equal(SYNC_STATE_BY_COLLECTION.readingSessions, 'library');
+});
+
+test('invalid or empty sync baselines fall back to first-device reconciliation', () => {
+  assert.equal(parseSyncBase(null), null);
+  assert.equal(parseSyncBase(''), null);
+  assert.equal(parseSyncBase('{}'), null);
+  assert.equal(parseSyncBase('{broken'), null);
+  assert.equal(parseSyncBase('[]'), null);
+  assert.deepEqual(parseSyncBase('{"tasks":[]}'), { tasks: [] });
 });
 
 test('first-device reconciliation preserves cloud versions and uploads only local-only ids', () => {
