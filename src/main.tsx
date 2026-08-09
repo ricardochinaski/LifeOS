@@ -48,13 +48,19 @@ const StartupFallback = ({ error }: { error: unknown }) => {
   );
 };
 
-class StartupErrorBoundary extends Component<
-  { children: ReactNode },
-  { error: Error | null }
-> {
-  state: { error: Error | null } = { error: null };
+type StartupErrorBoundaryProps = { children: ReactNode };
+type StartupErrorBoundaryState = { error: Error | null };
 
-  static getDerivedStateFromError(error: Error) {
+class StartupErrorBoundary extends Component<StartupErrorBoundaryProps, StartupErrorBoundaryState> {
+  state: StartupErrorBoundaryState = { error: null };
+  private readonly content: ReactNode;
+
+  constructor(props: StartupErrorBoundaryProps) {
+    super(props);
+    this.content = props.children;
+  }
+
+  static getDerivedStateFromError(error: Error): StartupErrorBoundaryState {
     return { error };
   }
 
@@ -64,7 +70,7 @@ class StartupErrorBoundary extends Component<
 
   render() {
     if (this.state.error) return <StartupFallback error={this.state.error} />;
-    return this.props.children;
+    return this.content;
   }
 }
 
