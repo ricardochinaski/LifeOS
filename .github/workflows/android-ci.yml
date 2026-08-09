@@ -36,6 +36,11 @@ jobs:
     env:
       LIFEOS_VERSION_CODE: ${{ github.run_number }}
       LIFEOS_VERSION_NAME: 0.3.0-ci.${{ github.run_number }}
+      LIFEOS_CI_EXPECTED_SHA1: DC:84:DA:19:59:01:17:8B:0C:9E:80:2F:0F:F5:02:6F:34:D7:43:4B
+      LIFEOS_CI_KEYSTORE_B64: ${{ secrets.LIFEOS_CI_KEYSTORE_B64 }}
+      LIFEOS_CI_KEYSTORE_PASSWORD: ${{ secrets.LIFEOS_CI_KEYSTORE_PASSWORD }}
+      LIFEOS_CI_KEY_ALIAS: ${{ secrets.LIFEOS_CI_KEY_ALIAS }}
+      LIFEOS_CI_KEY_PASSWORD: ${{ secrets.LIFEOS_CI_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -60,6 +65,52 @@ jobs:
       - name: Install Android SDK 36
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Prepare stable CI debug signing
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          values=(
+            "$LIFEOS_CI_KEYSTORE_B64"
+            "$LIFEOS_CI_KEYSTORE_PASSWORD"
+            "$LIFEOS_CI_KEY_ALIAS"
+            "$LIFEOS_CI_KEY_PASSWORD"
+          )
+          configured=0
+          for value in "${values[@]}"; do
+            if [[ -n "$value" ]]; then configured=$((configured + 1)); fi
+          done
+
+          if [[ "$configured" -eq 0 ]]; then
+            echo "Stable CI signing secrets are not configured; using the runner debug keystore for this build."
+            echo "LIFEOS_CI_SIGNING_ENABLED=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if [[ "$configured" -ne 4 ]]; then
+            echo "Stable CI signing is partially configured. All four LIFEOS_CI_* secrets are required." >&2
+            exit 1
+          fi
+
+          keystore_path="$RUNNER_TEMP/lifeos-ci-debug.jks"
+          printf '%s' "$LIFEOS_CI_KEYSTORE_B64" | base64 --decode > "$keystore_path"
+          chmod 600 "$keystore_path"
+
+          actual_sha1=$("$JAVA_HOME/bin/keytool" -list -v \
+            -keystore "$keystore_path" \
+            -storepass "$LIFEOS_CI_KEYSTORE_PASSWORD" \
+            -alias "$LIFEOS_CI_KEY_ALIAS" \
+            | awk -F'SHA1: ' '/SHA1:/ {print $2; exit}')
+
+          if [[ "$actual_sha1" != "$LIFEOS_CI_EXPECTED_SHA1" ]]; then
+            echo "CI keystore SHA-1 mismatch. Expected $LIFEOS_CI_EXPECTED_SHA1 but received $actual_sha1." >&2
+            exit 1
+          fi
+
+          echo "Stable CI signing keystore verified: $actual_sha1"
+          echo "LIFEOS_CI_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
+          echo "LIFEOS_CI_SIGNING_ENABLED=true" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: npm ci
 
@@ -75,11 +126,39 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug assembleRelease bundleRelease --no-daemon --stacktrace
 
-      - name: Validate Android artifacts
+      - name: Validate Android artifacts and debug certificate
+        shell: bash
         run: |
-          test -f android/app/build/outputs/apk/debug/app-debug.apk
-          test -f android/app/build/outputs/apk/release/app-release-unsigned.apk
-          test -f android/app/build/outputs/bundle/release/app-release.aab
+          set -euo pipefail
+          debug_apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          release_apk="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          release_aab="android/app/build/outputs/bundle/release/app-release.aab"
+
+          test -f "$debug_apk"
+          test -f "$release_apk"
+          test -f "$release_aab"
+
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$apksigner" verify --verbose "$debug_apk"
+          apk_sha1=$(
+            "$apksigner" verify --print-certs "$debug_apk" \
+              | awk -F': ' '/certificate SHA-1 digest/ {print toupper($2); exit}'
+          )
+          expected_compact=$(printf '%s' "$LIFEOS_CI_EXPECTED_SHA1" | tr -d ':')
+
+          if [[ "${LIFEOS_CI_SIGNING_ENABLED:-false}" == "true" && "$apk_sha1" != "$expected_compact" ]]; then
+            echo "Built debug APK certificate mismatch. Expected $expected_compact but received $apk_sha1." >&2
+            exit 1
+          fi
+
+          {
+            echo "mode=${LIFEOS_CI_SIGNING_ENABLED:-false}"
+            echo "expected_sha1=$LIFEOS_CI_EXPECTED_SHA1"
+            echo "apk_sha1=$apk_sha1"
+            echo "commit=${GITHUB_SHA}"
+          } > android-ci-signing.txt
+
+          cat android-ci-signing.txt
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
@@ -91,3 +170,4 @@ jobs:
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/apk/release/app-release-unsigned.apk
             android/app/build/outputs/bundle/release/app-release.aab
+            android-ci-signing.txt
