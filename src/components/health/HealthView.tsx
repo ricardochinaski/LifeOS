@@ -1,3 +1,4 @@
+import { todayLocalDate } from '../../lib/dateOnly';
 import React, { useState } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { HealthLog, WorkoutLog, WorkoutType } from '../../types';
@@ -238,7 +239,7 @@ export const HealthView: React.FC = () => {
       : [];
 
     addHealthLog({
-      date: new Date().toISOString().split('T')[0],
+      date: todayLocalDate(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       bloodPressureSys: newSystolic !== '' ? Number(newSystolic) : undefined,
       bloodPressureDia: newDiastolic !== '' ? Number(newDiastolic) : undefined,
@@ -264,7 +265,7 @@ export const HealthView: React.FC = () => {
     if (validExercises.length === 0) return;
 
     addWorkoutLog({
-      date: new Date().toISOString().split('T')[0],
+      date: todayLocalDate(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       type: newWorkoutType,
       durationMinutes: Number(newWorkoutDuration) || 0,

@@ -1,3 +1,4 @@
+import { formatLocalDate, todayLocalDate } from '../../lib/dateOnly';
 import React, { useState, useMemo } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { Habit, HabitLog } from '../../types';
@@ -37,7 +38,7 @@ export const HabitsView: React.FC = () => {
   const [editLogDate, setEditLogDate] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayLocalDate();
 
   const filteredHabits = habits.filter((h) => {
     if (activeFilter === 'all') return true;
@@ -119,7 +120,7 @@ export const HabitsView: React.FC = () => {
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      return d.toISOString().split('T')[0];
+      return formatLocalDate(d);
     });
   };
 
@@ -131,7 +132,7 @@ export const HabitsView: React.FC = () => {
     const days: (string | null)[] = [];
     for (let i = 0; i < (firstDay.getDay() || 7) - 1; i++) days.push(null);
     for (let d = 1; d <= lastDay.getDate(); d++) {
-      days.push(new Date(target.getFullYear(), target.getMonth(), d).toISOString().split('T')[0]);
+      days.push(formatLocalDate(new Date(target.getFullYear(), target.getMonth(), d)));
     }
     return days;
   };
@@ -508,7 +509,7 @@ const CardsView: React.FC<{
   const past30: string[] = [];
   for (let i = 29; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i);
-    past30.push(d.toISOString().split('T')[0]);
+    past30.push(formatLocalDate(d));
   }
 
   const loggedTodaySet = new Set(habitLogs.filter(l => l.date === todayStr).map(l => l.habitId));

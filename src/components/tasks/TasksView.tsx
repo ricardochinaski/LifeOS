@@ -1,3 +1,4 @@
+import { todayLocalDate } from '../../lib/dateOnly';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { Task, ViewMode, Priority, TaskStatus, RecurrenceRule } from '../../types';
@@ -39,7 +40,7 @@ export const TasksView: React.FC = () => {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>('p3');
-  const [newTaskDueDate, setNewTaskDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>(todayLocalDate());
   const [newTaskNotifyAt, setNewTaskNotifyAt] = useState<string>('');
   const [newTaskArea, setNewTaskArea] = useState<string>('area_work');
   const [newTaskProject, setNewTaskProject] = useState<string>('');
@@ -189,7 +190,7 @@ export const TasksView: React.FC = () => {
     if (selectedPriorityFilter !== 'all') result = result.filter((t) => t.priority === selectedPriorityFilter);
     if (selectedProjectFilter !== 'all') result = result.filter((t) => t.projectId === selectedProjectFilter);
     if (selectedShiftFilter !== 'all') result = result.filter((t) => (t.shiftContext || 'all') === selectedShiftFilter || t.shiftContext === undefined || t.shiftContext === 'all');
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalDate();
     if (savedFilter === 'today') result = result.filter(t => t.status !== 'completed' && t.dueDate === today);
     if (savedFilter === 'overdue') result = result.filter(t => t.status !== 'completed' && !!t.dueDate && t.dueDate < today);
     if (savedFilter === 'focus') result = result.filter(t => t.status !== 'completed' && (t.priority === 'p1' || t.priority === 'p2'));
@@ -209,8 +210,8 @@ export const TasksView: React.FC = () => {
     const completed = tasks.filter((t) => t.status === 'completed').length;
     const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
     const todo = tasks.filter((t) => t.status === 'todo').length;
-    const overdue = tasks.filter((t) => t.dueDate && t.dueDate < new Date().toISOString().split('T')[0] && t.status !== 'completed').length;
-    const dueToday = tasks.filter((t) => t.dueDate === new Date().toISOString().split('T')[0] && t.status !== 'completed').length;
+    const overdue = tasks.filter((t) => t.dueDate && t.dueDate < todayLocalDate() && t.status !== 'completed').length;
+    const dueToday = tasks.filter((t) => t.dueDate === todayLocalDate() && t.status !== 'completed').length;
     return { total, completed, inProgress, todo, overdue, dueToday, completionRate: total > 0 ? Math.round((completed / total) * 100) : 0 };
   }, [tasks]);
 
@@ -277,13 +278,13 @@ export const TasksView: React.FC = () => {
   const advanceStatus = (task: Task) => {
     const next: Record<TaskStatus, TaskStatus | null> = { todo: 'in_progress', in_progress: 'completed', completed: null };
     const nextStatus = next[task.status];
-    if (nextStatus) updateTask({ ...task, status: nextStatus, completedAt: nextStatus === 'completed' ? new Date().toISOString().split('T')[0] : task.completedAt });
+    if (nextStatus) updateTask({ ...task, status: nextStatus, completedAt: nextStatus === 'completed' ? todayLocalDate() : task.completedAt });
   };
 
   const regressStatus = (task: Task) => {
     const prev: Record<TaskStatus, TaskStatus | null> = { completed: 'in_progress', in_progress: 'todo', todo: null };
     const prevStatus = prev[task.status];
-    if (prevStatus) updateTask({ ...task, status: prevStatus, completedAt: prevStatus === 'completed' ? new Date().toISOString().split('T')[0] : undefined });
+    if (prevStatus) updateTask({ ...task, status: prevStatus, completedAt: prevStatus === 'completed' ? todayLocalDate() : undefined });
   };
 
   const renderTaskCard = (t: Task, compact = false) => {
@@ -331,7 +332,7 @@ export const TasksView: React.FC = () => {
               {area && <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{area.name}</span>}
               {proj && <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">{proj.name}</span>}
               {t.dueDate && (
-                <span className={`text-[10px] flex items-center gap-1 font-mono ${t.dueDate < new Date().toISOString().split('T')[0] && t.status !== 'completed' ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
+                <span className={`text-[10px] flex items-center gap-1 font-mono ${t.dueDate < todayLocalDate() && t.status !== 'completed' ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
                   <Clock className="w-3 h-3" />
                   {t.dueDate}
                 </span>
@@ -429,7 +430,7 @@ export const TasksView: React.FC = () => {
     const days: (number | null)[] = [];
     for (let i = 0; i < startPad; i++) days.push(null);
     for (let d = 1; d <= totalDays; d++) days.push(d);
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalDate();
     const tasksByDate: Record<string, Task[]> = {};
     tasks.forEach((t) => {
       if (t.dueDate) {

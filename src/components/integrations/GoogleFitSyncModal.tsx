@@ -1,3 +1,4 @@
+import { todayLocalDate } from '../../lib/dateOnly';
 import React, { useState } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { syncFromHealthConnect, HealthConnectData } from '../../lib/healthConnect';
@@ -49,7 +50,7 @@ export const GoogleFitSyncModal: React.FC<GoogleFitSyncModalProps> = ({ isOpen, 
         }));
 
         addHealthLog({
-          date: new Date().toISOString().split('T')[0],
+          date: todayLocalDate(),
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           spO2Pct: healthData.spO2Pct ?? metrics.spO2,
           heartRateBpm: healthData.heartRateBpm ?? metrics.heartRate,
@@ -79,7 +80,7 @@ export const GoogleFitSyncModal: React.FC<GoogleFitSyncModalProps> = ({ isOpen, 
     setSyncSuccess(false);
     setTimeout(() => {
       addHealthLog({
-        date: new Date().toISOString().split('T')[0],
+        date: todayLocalDate(),
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         spO2Pct: metrics.spO2,
         heartRateBpm: metrics.heartRate,

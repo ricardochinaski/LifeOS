@@ -1,3 +1,4 @@
+import { formatLocalDate, todayLocalDate } from '../../lib/dateOnly';
 import React, { useState, useMemo } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import {
@@ -10,7 +11,7 @@ type CalendarFilter = 'tasks' | 'habits' | 'health' | 'shift' | 'finances';
 export const CalendarView: React.FC = () => {
   const { tasks, habits, habitLogs, healthLogs, transactions, shiftConfig, shiftInfo } = useLifeOS();
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayLocalDate();
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<Set<CalendarFilter>>(new Set(['tasks', 'habits', 'health', 'shift']));
@@ -34,7 +35,7 @@ export const CalendarView: React.FC = () => {
   const days: (string | null)[] = [];
   for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
   for (let d = 1; d <= lastDay.getDate(); d++) {
-    days.push(new Date(year, month, d).toISOString().split('T')[0]);
+    days.push(formatLocalDate(new Date(year, month, d)));
   }
 
   const monthLabel = target.toLocaleDateString('es', { month: 'long', year: 'numeric' });

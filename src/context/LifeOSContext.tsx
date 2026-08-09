@@ -5,7 +5,7 @@ import {
   FinancialAccount, Transaction, Budget, Debt, Book, ReadingLog, BookNote,
   TabType, QuickCaptureParsed, Priority, TaskStatus, ShiftConfig, ShiftInfo, ShiftType,
   HealthProfile, HealthLog, ReadingGroup, ReadingSession, AppCustomSettings,
-  FinancialGoal, RecurringTransaction, SyncState, SyncCollection,
+  FinancialGoal, RecurringTransaction, SyncState,
   WorkoutLog, WorkoutType
 } from '../types';
 import {
@@ -23,6 +23,12 @@ import {
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { isNative } from '../lib/native';
 import { scheduleTaskNotifications } from '../utils/notifications';
+import { addDaysToDateOnly, addMonthsToDateOnly, todayLocalDate } from '../lib/dateOnly';
+import {
+  diffStoredCollections, getLocalOnlyEntities, isSyncCollectionName, mergeRemoteWithLocalOnly,
+  normalizeStoredCollection, parseSyncBase, SYNC_COLLECTIONS, SYNC_STATE_BY_COLLECTION, syncValuesEqual,
+  type SyncCollectionName, type SyncDataset,
+} from '../lib/syncEngine';
 
 interface LifeOSContextType {
   activeTab: TabType;
@@ -172,6 +178,29 @@ interface LifeOSContextType {
 
 const STORAGE_KEY = 'lifeos_local_v1';
 const CURATED_CONTENT_KEY = 'lifeos_curated_content_2026_07_29';
+const SYNC_BASE_KEY_PREFIX = 'lifeos_sync_base_v2_';
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const readStoredRecord = (raw: string | null): Record<string, unknown> => {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isPlainRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const syncBaseKey = (uid: string) => `${SYNC_BASE_KEY_PREFIX}${uid}`;
+const readSyncBase = (uid: string): Record<string, unknown> | null =>
+  parseSyncBase(localStorage.getItem(syncBaseKey(uid)));
+
+const updateSyncBasePart = (uid: string, key: string, value: unknown) => {
+  const base = readSyncBase(uid) || {};
+  localStorage.setItem(syncBaseKey(uid), JSON.stringify({ ...base, [key]: value }));
+};
 
 const LifeOSContext = createContext<LifeOSContextType | undefined>(undefined);
 
@@ -196,7 +225,7 @@ const col = (uid: string, sub: string) => collection(db, 'users', uid, sub);
 const docRef = (uid: string, sub: string, id: string) => doc(db, 'users', uid, sub, id);
 
 // List of collection names to migrate/load
-const COLLECTIONS = ['tasks', 'habits', 'habitLogs', 'accounts', 'budgets', 'debts', 'transactions', 'financialGoals', 'recurringTransactions', 'books', 'readingLogs', 'bookNotes', 'readingGroups', 'readingSessions', 'projects', 'healthLogs', 'workoutLogs'] as const;
+const COLLECTIONS = SYNC_COLLECTIONS;
 const DEFAULT_SYNC_STATE: SyncState = { tasks: 'idle', habits: 'idle', habitLogs: 'idle', finances: 'idle', library: 'idle', health: 'idle', projects: 'idle', settings: 'idle' };
 
 const curatedTasks = initialTasks.filter((task) => task.id.startsWith('task_home_') || task.id.startsWith('task_personal_') || task.id.startsWith('task_finance_subscription_'));
@@ -263,6 +292,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [healthLogs, setHealthLogs] = useState<HealthLog[]>(initialHealthLogs);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [appSettings, setAppSettings] = useState<AppCustomSettings>(initialAppSettings);
+  const [localHydrated, setLocalHydrated] = useState(false);
 
   // Auth & Cloud Sync State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -280,13 +310,15 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Track if we are in the initial auth load to avoid saving stale localStorage
   const initialLoadDone = useRef(false);
+  const lastPersistedSnapshot = useRef<string | null>(null);
 
   // Firestore snapshot setters — maps collection name to its state setter
-  const setterMap: Record<string, (data: any) => void> = {
+  const setterMap: Record<SyncCollectionName, (data: any[]) => void> = {
     tasks: setTasks, habits: setHabits, habitLogs: setHabitLogs,
     accounts: setAccounts, budgets: setBudgets, debts: setDebts,
-    transactions: setTransactions, financialGoals: setFinancialGoals, recurringTransactions: setRecurringTransactions, books: setBooks,
-    readingLogs: setReadingLogs, bookNotes: setBookNotes,
+    transactions: setTransactions, financialGoals: setFinancialGoals, recurringTransactions: setRecurringTransactions,
+    books: setBooks, readingLogs: setReadingLogs, bookNotes: setBookNotes,
+    readingGroups: setReadingGroups, readingSessions: setReadingSessions,
     projects: setProjects, healthLogs: setHealthLogs, workoutLogs: setWorkoutLogs,
   };
 
@@ -294,6 +326,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
+      lastPersistedSnapshot.current = saved;
       if (saved) {
         const parsed = JSON.parse(saved);
         const shouldAddCuratedContent = localStorage.getItem(CURATED_CONTENT_KEY) !== 'done';
@@ -325,6 +358,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error('Error reading localStorage for LifeOS:', e);
     }
     initialLoadDone.current = true;
+    setLocalHydrated(true);
   }, []);
 
   // --- Firestore helpers ---
@@ -349,6 +383,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
     if (lifeOSData.healthProfile) {
       writes.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), removeUndefinedFields(lifeOSData.healthProfile)));
+    }
+    if (lifeOSData.appSettings) {
+      writes.push(setDoc(doc(db, 'users', uid, 'config', 'appSettings'), removeUndefinedFields(lifeOSData.appSettings)));
     }
     await Promise.all(writes);
   };
@@ -381,42 +418,117 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     await Promise.all(writes);
   };
 
-  const loadFromSubcollections = async (uid: string): Promise<boolean> => {
+  const loadFromSubcollections = async (
+    uid: string,
+    firstDeviceLocalSnapshot: Record<string, unknown> = {},
+  ): Promise<boolean> => {
     const counts: Record<string, number> = {};
     const promises = COLLECTIONS.map(async (colName) => {
       try {
         const snapshot = await getDocs(col(uid, colName));
-        if (!snapshot.empty) {
-          const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
-          setterMap[colName](data);
-          counts[colName] = data.length;
-        } else {
-          counts[colName] = 0;
+        const remoteData = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+        const localData = normalizeStoredCollection(firstDeviceLocalSnapshot[colName]);
+        const localOnly = getLocalOnlyEntities(remoteData, localData);
+
+        if (localOnly.length > 0) {
+          await Promise.all(
+            localOnly.map(item => setDoc(docRef(uid, colName, item.id), removeUndefinedFields(item))),
+          );
         }
+
+        const mergedData = mergeRemoteWithLocalOnly(remoteData, localData);
+        setterMap[colName](mergedData);
+        if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) {
+          updateSyncBasePart(uid, colName, mergedData);
+        }
+        counts[colName] = mergedData.length;
       } catch (e) {
         console.error(`Error loading ${colName}:`, e);
         counts[colName] = -1;
       }
     });
-    // Load single config docs
+
+    const loadConfig = async (
+      docName: 'shift' | 'healthProfile' | 'appSettings',
+      localKey: 'shiftConfig' | 'healthProfile' | 'appSettings',
+      apply: (value: any) => void,
+    ) => {
+      try {
+        const ref = doc(db, 'users', uid, 'config', docName);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          const value = snap.data();
+          apply(value);
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
+            updateSyncBasePart(uid, localKey, value);
+          }
+          return;
+        }
+
+        const localValue = firstDeviceLocalSnapshot[localKey];
+        if (isPlainRecord(localValue)) {
+          await setDoc(ref, removeUndefinedFields(localValue));
+          apply(localValue);
+          updateSyncBasePart(uid, localKey, localValue);
+        }
+      } catch (e) {
+        console.error(`Error loading ${docName} config:`, e);
+      }
+    };
+
     await Promise.all([
       ...promises,
-      getDoc(doc(db, 'users', uid, 'config', 'shift')).then(snap => {
-        if (snap.exists()) setShiftConfig(snap.data() as ShiftConfig);
-      }).catch(e => console.error('Error loading shift config:', e)),
-      getDoc(doc(db, 'users', uid, 'config', 'healthProfile')).then(snap => {
-        if (snap.exists()) setHealthProfile(snap.data() as HealthProfile);
-      }).catch(e => console.error('Error loading health profile:', e)),
-      getDoc(doc(db, 'users', uid, 'config', 'appSettings')).then(snap => {
-        if (snap.exists()) setAppSettings(prev => ({ ...prev, ...snap.data() }));
-      }).catch(e => console.error('Error loading app settings:', e)),
+      loadConfig('shift', 'shiftConfig', value => setShiftConfig(value as ShiftConfig)),
+      loadConfig('healthProfile', 'healthProfile', value => setHealthProfile(value as HealthProfile)),
+      loadConfig('appSettings', 'appSettings', value => setAppSettings(prev => ({ ...prev, ...value }))),
     ]);
+
     const loaded = Object.entries(counts).filter(([, c]) => c > 0).length;
     if (loaded > 0) {
-      const summary = Object.entries(counts).filter(([, c]) => c > 0).map(([k, c]) => `${k}:${c}`).join(', ');
+      const summary = Object.entries(counts)
+        .filter(([, c]) => c > 0)
+        .map(([k, c]) => `${k}:${c}`)
+        .join(', ');
       showToast(`Datos cargados desde la nube (${summary})`);
     }
     return loaded > 0;
+  };
+
+  const replayOfflineChanges = async (
+    uid: string,
+    cloudBase: Record<string, unknown>,
+    currentLocal: Record<string, unknown>,
+  ) => {
+    const delta = diffStoredCollections(cloudBase, currentLocal);
+    const writes: Promise<void>[] = [];
+
+    for (const colName of COLLECTIONS) {
+      for (const item of delta[colName].upserts) {
+        writes.push(setDoc(docRef(uid, colName, item.id), removeUndefinedFields(item)));
+      }
+      for (const id of delta[colName].deletes) {
+        writes.push(deleteDoc(docRef(uid, colName, id)));
+      }
+    }
+
+    const configMappings = [
+      { cloudDoc: 'shift', localKey: 'shiftConfig' },
+      { cloudDoc: 'healthProfile', localKey: 'healthProfile' },
+      { cloudDoc: 'appSettings', localKey: 'appSettings' },
+    ] as const;
+
+    for (const { cloudDoc, localKey } of configMappings) {
+      const before = cloudBase[localKey];
+      const after = currentLocal[localKey];
+      if (isPlainRecord(after) && !syncValuesEqual(before, after)) {
+        writes.push(setDoc(doc(db, 'users', uid, 'config', cloudDoc), removeUndefinedFields(after)));
+      }
+    }
+
+    if (writes.length > 0) {
+      await Promise.all(writes);
+      showToast(`Cambios offline sincronizados (${writes.length})`);
+    }
   };
 
   const setupSnapshotListeners = (uid: string) => {
@@ -427,6 +539,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         (snapshot) => {
           const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
           setterMap[colName](data);
+          if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) {
+            updateSyncBasePart(uid, colName, data);
+          }
         },
         (err) => console.error(`Error in ${colName} listener:`, err)
       );
@@ -435,26 +550,45 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // Listeners for single config docs
     const unsubShift = onSnapshot(
       doc(db, 'users', uid, 'config', 'shift'),
-      (snap) => { if (snap.exists()) setShiftConfig(snap.data() as ShiftConfig); },
+      (snap) => {
+        if (snap.exists()) {
+          const value = snap.data() as ShiftConfig;
+          setShiftConfig(value);
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) updateSyncBasePart(uid, 'shiftConfig', value);
+        }
+      },
       (err) => console.error('Error in shiftConfig listener:', err)
     );
     unsubscribers.current.push(unsubShift);
     const unsubHealth = onSnapshot(
       doc(db, 'users', uid, 'config', 'healthProfile'),
-      (snap) => { if (snap.exists()) setHealthProfile(snap.data() as HealthProfile); },
+      (snap) => {
+        if (snap.exists()) {
+          const value = snap.data() as HealthProfile;
+          setHealthProfile(value);
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) updateSyncBasePart(uid, 'healthProfile', value);
+        }
+      },
       (err) => console.error('Error in healthProfile listener:', err)
     );
     unsubscribers.current.push(unsubHealth);
+    const unsubSettings = onSnapshot(
+      doc(db, 'users', uid, 'config', 'appSettings'),
+      (snap) => {
+        if (snap.exists()) {
+          const value = snap.data();
+          setAppSettings(prev => ({ ...prev, ...value }));
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) updateSyncBasePart(uid, 'appSettings', value);
+        }
+      },
+      (err) => console.error('Error in appSettings listener:', err)
+    );
+    unsubscribers.current.push(unsubSettings);
   };
 
   // Write helper: updates local state AND writes to Firestore
-  const writeToFirestore = async (uid: string, sub: string, id: string, data: any) => {
-    const collectionState: Partial<Record<string, SyncCollection>> = {
-      tasks: 'tasks', habits: 'habits', habitLogs: 'habitLogs', projects: 'projects',
-      accounts: 'finances', budgets: 'finances', debts: 'finances', transactions: 'finances', financialGoals: 'finances', recurringTransactions: 'finances',
-      books: 'library', readingLogs: 'library', bookNotes: 'library', healthLogs: 'health', workoutLogs: 'health',
-    };
-    const stateKey = collectionState[sub];
+  const writeToFirestore = async (uid: string, sub: string, id: string, data: any, throwOnError = false) => {
+    const stateKey = isSyncCollectionName(sub) ? SYNC_STATE_BY_COLLECTION[sub] : undefined;
     if (stateKey) setSyncState(prev => ({ ...prev, [stateKey]: 'syncing' }));
     try {
       await setDoc(docRef(uid, sub, id), removeUndefinedFields(data));
@@ -464,6 +598,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error(`Error writing ${sub}/${id} to Firestore:`, e);
       if (stateKey) setSyncState(prev => ({ ...prev, [stateKey]: 'error' }));
       showToast(`No se pudo sincronizar ${sub}. Revisa la consola.`);
+      if (throwOnError) throw e;
     }
   };
 
@@ -483,6 +618,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (user) {
         setIsSyncing(true);
         try {
+          const localSnapshot = readStoredRecord(localStorage.getItem(STORAGE_KEY));
+          const cloudBase = readSyncBase(user.uid);
+
           // 1. Check for legacy lifeOSData migration
           const userDocRef = doc(db, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
@@ -492,24 +630,15 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             await setDoc(userDocRef, { lifeOSData: deleteField() }, { merge: true });
           }
 
-          // 2. Load data from Firestore subcollections
-          await loadFromSubcollections(user.uid);
+          // 2. If this device has a cloud base, replay only changes made since that base.
+          //    On first connection, cloud wins id conflicts and local-only ids are preserved.
+          if (cloudBase) {
+            await replayOfflineChanges(user.uid, cloudBase, localSnapshot);
+          }
+          await loadFromSubcollections(user.uid, cloudBase ? {} : localSnapshot);
           await ensureCuratedContentInCloud(user.uid);
 
-          // 3. Initial upload: ensure all local data is in Firestore
-          const localData = localStorage.getItem(STORAGE_KEY);
-          if (localData) {
-            const parsed = JSON.parse(localData);
-            const hasLocalData = COLLECTIONS.some(colName => {
-              const items = parsed[colName];
-              return items && Array.isArray(items) && items.length > 0;
-            });
-            if (hasLocalData) {
-              await syncToCloud();
-            }
-          }
-
-          // 4. Set up real-time listeners
+          // 3. Set up real-time listeners
           setupSnapshotListeners(user.uid);
         } catch (error) {
           console.error('Error loading Firestore data:', error);
@@ -523,17 +652,24 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return () => { unsubscribe(); teardownListeners(); };
   }, []);
 
-  // --- Sync to LocalStorage (every state change, regardless of auth) ---
+  // --- Sync to LocalStorage after hydration ---
   useEffect(() => {
+    if (!localHydrated) return;
     try {
       const dataToSave = {
-        tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings
+        tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions,
+        books, readingLogs, bookNotes, readingGroups, readingSessions, projects,
+        shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+      const serialized = JSON.stringify(dataToSave);
+      if (serialized !== lastPersistedSnapshot.current) {
+        localStorage.setItem(STORAGE_KEY, serialized);
+        lastPersistedSnapshot.current = serialized;
+      }
     } catch (e) {
       console.error('Error saving to localStorage:', e);
     }
-  }, [tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings]);
+  }, [localHydrated, tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions, books, readingLogs, bookNotes, readingGroups, readingSessions, projects, shiftConfig, healthProfile, healthLogs, workoutLogs, appSettings]);
 
   const signInWithGoogle = async () => {
     setIsSigningIn(true);
@@ -574,23 +710,18 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setIsSyncing(true);
     try {
       const uid = currentUser.uid;
-      // Write every entity to its subcollection
+      const dataByCollection: SyncDataset = {
+        tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions,
+        books, readingLogs, bookNotes, readingGroups, readingSessions, projects, healthLogs, workoutLogs,
+      };
       const allWrites: Promise<void>[] = [];
-      for (const t of tasks) allWrites.push(writeToFirestore(uid, 'tasks', t.id, t));
-      for (const h of habits) allWrites.push(writeToFirestore(uid, 'habits', h.id, h));
-      for (const l of habitLogs) allWrites.push(writeToFirestore(uid, 'habitLogs', l.id, l));
-      for (const a of accounts) allWrites.push(writeToFirestore(uid, 'accounts', a.id, a));
-      for (const b of budgets) allWrites.push(writeToFirestore(uid, 'budgets', b.id, b));
-      for (const d of debts) allWrites.push(writeToFirestore(uid, 'debts', d.id, d));
-      for (const t of transactions) allWrites.push(writeToFirestore(uid, 'transactions', t.id, t));
-      for (const goal of financialGoals) allWrites.push(writeToFirestore(uid, 'financialGoals', goal.id, goal));
-      for (const recurring of recurringTransactions) allWrites.push(writeToFirestore(uid, 'recurringTransactions', recurring.id, recurring));
-      for (const b of books) allWrites.push(writeToFirestore(uid, 'books', b.id, b));
-      for (const l of readingLogs) allWrites.push(writeToFirestore(uid, 'readingLogs', l.id, l));
-      for (const n of bookNotes) allWrites.push(writeToFirestore(uid, 'bookNotes', n.id, n));
-      for (const p of projects) allWrites.push(writeToFirestore(uid, 'projects', p.id, p));
-      for (const l of healthLogs) allWrites.push(writeToFirestore(uid, 'healthLogs', l.id, l));
-      for (const w of workoutLogs) allWrites.push(writeToFirestore(uid, 'workoutLogs', w.id, w));
+
+      for (const colName of COLLECTIONS) {
+        for (const item of dataByCollection[colName]) {
+          allWrites.push(writeToFirestore(uid, colName, item.id, item, true));
+        }
+      }
+
       allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'shift'), removeUndefinedFields(shiftConfig)));
       allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'healthProfile'), removeUndefinedFields(healthProfile)));
       allWrites.push(setDoc(doc(db, 'users', uid, 'config', 'appSettings'), removeUndefinedFields(appSettings)));
@@ -612,7 +743,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const closeShiftCalibration = () => setIsShiftCalibrationOpen(false);
 
   const calibrateShift = (dayInPhase: number, phase: ShiftType, restDays = 14, workDays = 14) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = todayLocalDate();
     const newAnchorDate = getAnchorDateForDay(dayInPhase, phase, todayStr);
     setShiftConfig((prev) => ({
       ...prev,
@@ -703,7 +834,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const trimmed = text.trim();
     let priority: Priority = 'p4';
     let type: 'task' | 'habit' | 'transaction' | 'reading' = 'task';
-    let dueDate = new Date().toISOString().split('T')[0];
+    let dueDate = todayLocalDate();
     let areaId: string | undefined = undefined;
     let amount: number | undefined = undefined;
     let pages: number | undefined = undefined;
@@ -750,7 +881,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const parsed = parseQuickCapture(text);
     if (!parsed.title) return { success: false, message: 'Ingresa una descripción válida.' };
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = todayLocalDate();
 
     if (parsed.type === 'transaction' && parsed.amount) {
       const newTx: Transaction = {
@@ -810,19 +941,27 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // --- Recurrence Helper ---
   const createNextRecurringTask = (completedTask: Task): Task | null => {
     if (!completedTask.recurrence) return null;
-    const dueDate = completedTask.dueDate ? new Date(completedTask.dueDate + 'T00:00:00') : new Date();
+    const baseDue = completedTask.dueDate || todayLocalDate();
     const interval = completedTask.recurrence.interval || 1;
+    let nextDue = baseDue;
+
     switch (completedTask.recurrence.type) {
-      case 'daily': dueDate.setDate(dueDate.getDate() + interval); break;
-      case 'weekly': dueDate.setDate(dueDate.getDate() + 7 * interval); break;
-      case 'monthly': dueDate.setMonth(dueDate.getMonth() + interval); break;
+      case 'daily':
+        nextDue = addDaysToDateOnly(baseDue, interval);
+        break;
+      case 'weekly':
+        nextDue = addDaysToDateOnly(baseDue, 7 * interval);
+        break;
+      case 'monthly':
+        nextDue = addMonthsToDateOnly(baseDue, interval);
+        break;
     }
-    const nextDue = dueDate.toISOString().split('T')[0];
+
     const newTask: Task = {
       ...completedTask,
       id: `task_${Date.now()}`,
       status: 'todo',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: todayLocalDate(),
       dueDate: nextDue,
       completedAt: undefined,
       completedCount: (completedTask.completedCount || 0) + 1,
@@ -840,7 +979,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const newTask: Task = {
       ...taskData,
       id: `task_${Date.now()}`,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: todayLocalDate(),
     };
     setTasks((prev) => [newTask, ...prev]);
     if (currentUser) writeToFirestore(currentUser.uid, 'tasks', newTask.id, newTask);
@@ -857,7 +996,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           const updated = {
             ...task,
             status: isCompleting ? 'completed' : 'todo',
-            completedAt: isCompleting ? new Date().toISOString().split('T')[0] : undefined,
+            completedAt: isCompleting ? todayLocalDate() : undefined,
             completedCount: isCompleting ? (task.completedCount || 0) + 1 : task.completedCount,
           };
           if (currentUser) writeToFirestore(currentUser.uid, 'tasks', taskId, updated);
@@ -892,7 +1031,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const newProj: Project = {
       ...projectData,
       id: `proj_${Date.now()}`,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: todayLocalDate(),
       progress: projectData.progress ?? 0,
       category: projectData.category || 'personal',
       status: projectData.status || 'in_progress',
@@ -949,7 +1088,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       id: `habit_${Date.now()}`,
       streak: 0,
       bestStreak: 0,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: todayLocalDate(),
     };
     setHabits((prev) => [newHabit, ...prev]);
     if (currentUser) writeToFirestore(currentUser.uid, 'habits', newHabit.id, newHabit);
@@ -968,39 +1107,30 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const logs = allLogs.filter(l => l.habitId === habitId).map(l => l.date).sort();
     const logSet = new Set(logs);
     const bestStreak = habit.bestStreak || 0;
+    const today = todayLocalDate();
 
-    // Walk backwards from yesterday (today doesn't count as streak continuity until tomorrow)
     let currentStreak = 0;
-    let allowSkip = true; // 2-day rule: allow one gap
-    const today = new Date().toISOString().split('T')[0];
-    const d = new Date();
-    d.setDate(d.getDate() - 1); // start from yesterday
+    let allowSkip = true;
+    let cursor = addDaysToDateOnly(today, -1);
 
     while (true) {
-      const dateStr = d.toISOString().split('T')[0];
-      if (logSet.has(dateStr)) {
+      if (logSet.has(cursor)) {
         currentStreak++;
         allowSkip = true;
-        d.setDate(d.getDate() - 1);
-      } else if (dateStr === today) {
-        d.setDate(d.getDate() - 1);
-        continue;
+        cursor = addDaysToDateOnly(cursor, -1);
       } else if (allowSkip) {
         allowSkip = false;
-        d.setDate(d.getDate() - 1);
-        continue;
+        cursor = addDaysToDateOnly(cursor, -1);
       } else {
         break;
       }
     }
 
-    // Count today separately
     if (logSet.has(today)) currentStreak++;
-
     return { streak: currentStreak, bestStreak: Math.max(bestStreak, currentStreak) };
   };
 
-  const logHabit = (habitId: string, dateStr = new Date().toISOString().split('T')[0], value = 1, notes = '') => {
+  const logHabit = (habitId: string, dateStr = todayLocalDate(), value = 1, notes = '') => {
     const existingLog = habitLogs.find((l) => l.habitId === habitId && l.date === dateStr);
 
     if (existingLog) {
@@ -1222,7 +1352,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       amount,
       category: 'Deudas & Cuotas',
       description: `Pago cuota: ${debt.name} (${debt.creditor})`,
-      date: new Date().toISOString().split('T')[0],
+      date: todayLocalDate(),
     };
     setTransactions((prev) => [newTx, ...prev]);
     setAccounts((prev) =>
@@ -1241,7 +1371,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const addFinancialGoal = (goalData: Omit<FinancialGoal, 'id' | 'createdAt'>) => {
-    const goal: FinancialGoal = { ...goalData, id: `goal_${Date.now()}`, createdAt: new Date().toISOString().split('T')[0] };
+    const goal: FinancialGoal = { ...goalData, id: `goal_${Date.now()}`, createdAt: todayLocalDate() };
     setFinancialGoals(prev => [goal, ...prev]);
     if (currentUser) writeToFirestore(currentUser.uid, 'financialGoals', goal.id, goal);
     showToast(`Meta financiera "${goal.name}" creada.`);
@@ -1279,7 +1409,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const newBook: Book = {
       ...bookData,
       id: `book_${Date.now()}`,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: todayLocalDate(),
     };
     setBooks((prev) => [newBook, ...prev]);
     if (currentUser) writeToFirestore(currentUser.uid, 'books', newBook.id, newBook);
@@ -1287,7 +1417,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const updateBookProgress = (bookId: string, newPage: number, notes?: string) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = todayLocalDate();
     setBooks((prev) =>
       prev.map((b) => {
         if (b.id === bookId) {
@@ -1338,11 +1468,123 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const newNote: BookNote = {
       ...noteData,
       id: `note_${Date.now()}`,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: todayLocalDate(),
     };
     setBookNotes((prev) => [newNote, ...prev]);
     if (currentUser) writeToFirestore(currentUser.uid, 'bookNotes', newNote.id, newNote);
     showToast('Nota de lectura guardada.');
+  };
+
+  // Reading session and group actions
+  const startReadingSession = (bookId: string, groupId?: string, notes?: string) => {
+    const now = new Date();
+    const session: ReadingSession = {
+      id: `reading_session_${Date.now()}`,
+      bookId,
+      groupId,
+      userId: currentUser?.uid || 'local',
+      date: todayLocalDate(),
+      startTime: now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      pagesRead: 0,
+      duration: 0,
+      notes,
+      createdAt: now.toISOString(),
+    };
+    setReadingSessions(prev => [session, ...prev]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'readingSessions', session.id, session);
+    showToast('Sesión de lectura iniciada.');
+  };
+
+  const endReadingSession = (sessionId: string) => {
+    const now = new Date();
+    setReadingSessions(prev => prev.map(session => {
+      if (session.id !== sessionId) return session;
+      const startedAt = new Date(`${session.date}T${session.startTime}:00`);
+      const duration = Number.isNaN(startedAt.getTime())
+        ? session.duration
+        : Math.max(session.duration, Math.round((now.getTime() - startedAt.getTime()) / 60_000));
+      const updated: ReadingSession = {
+        ...session,
+        endTime: now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        duration,
+      };
+      if (currentUser) writeToFirestore(currentUser.uid, 'readingSessions', sessionId, updated);
+      return updated;
+    }));
+    showToast('Sesión de lectura finalizada.');
+  };
+
+  const updateReadingSession = (sessionId: string, updates: Partial<ReadingSession>) => {
+    setReadingSessions(prev => prev.map(session => {
+      if (session.id !== sessionId) return session;
+      const updated = { ...session, ...updates, id: session.id };
+      if (currentUser) writeToFirestore(currentUser.uid, 'readingSessions', sessionId, updated);
+      return updated;
+    }));
+  };
+
+  const createReadingGroup = (group: Omit<ReadingGroup, 'id' | 'createdAt' | 'updatedAt' | 'progress'>) => {
+    const now = new Date().toISOString();
+    const created: ReadingGroup = {
+      ...group,
+      id: `reading_group_${Date.now()}`,
+      ownerId: group.ownerId || currentUser?.uid || 'local',
+      memberIds: Array.from(new Set(group.memberIds || [])),
+      membersCount: new Set(group.memberIds || []).size,
+      progress: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setReadingGroups(prev => [created, ...prev]);
+    if (currentUser) writeToFirestore(currentUser.uid, 'readingGroups', created.id, created);
+    showToast(`Grupo de lectura "${created.name}" creado.`);
+  };
+
+  const updateReadingGroup = (group: ReadingGroup) => {
+    const updated = { ...group, updatedAt: new Date().toISOString() };
+    setReadingGroups(prev => prev.map(item => item.id === group.id ? updated : item));
+    if (currentUser) writeToFirestore(currentUser.uid, 'readingGroups', group.id, updated);
+  };
+
+  const deleteReadingGroup = (groupId: string) => {
+    setReadingGroups(prev => prev.filter(group => group.id !== groupId));
+    if (currentUser) deleteFromFirestore(currentUser.uid, 'readingGroups', groupId);
+    showToast('Grupo de lectura eliminado.');
+  };
+
+  const updateReadingGroupProgress = (groupId: string, progress: number, currentPage: number) => {
+    setReadingGroups(prev => prev.map(group => {
+      if (group.id !== groupId) return group;
+      const updated: ReadingGroup = {
+        ...group,
+        progress: Math.max(0, Math.min(100, progress)),
+        currentPage: Math.max(0, currentPage),
+        updatedAt: new Date().toISOString(),
+      };
+      if (currentUser) writeToFirestore(currentUser.uid, 'readingGroups', groupId, updated);
+      return updated;
+    }));
+  };
+
+  const addReadingGroupMember = (groupId: string, memberId: string) => {
+    if (!memberId) return;
+    setReadingGroups(prev => prev.map(group => {
+      if (group.id !== groupId) return group;
+      const memberIds = Array.from(new Set([...group.memberIds, memberId]));
+      const updated = { ...group, memberIds, membersCount: memberIds.length, updatedAt: new Date().toISOString() };
+      if (currentUser) writeToFirestore(currentUser.uid, 'readingGroups', groupId, updated);
+      return updated;
+    }));
+  };
+
+  const removeReadingGroupMember = (groupId: string, memberId: string) => {
+    setReadingGroups(prev => prev.map(group => {
+      if (group.id !== groupId) return group;
+      const memberIds = group.memberIds.filter(id => id !== memberId);
+      const updated = { ...group, memberIds, membersCount: memberIds.length, updatedAt: new Date().toISOString() };
+      if (currentUser) writeToFirestore(currentUser.uid, 'readingGroups', groupId, updated);
+      return updated;
+    }));
   };
 
   // Health Actions
@@ -1397,7 +1639,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `LifeOS_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `LifeOS_Backup_${todayLocalDate()}.json`;
     a.click();
     showToast('Copia de respaldo exportada exitosamente.');
   };
@@ -1483,7 +1725,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         shiftConfig, shiftInfo, isShiftCalibrationOpen, openShiftCalibration, closeShiftCalibration,
         calibrateShift, updateShiftConfig,
         areas, projects, tasks, habits, habitLogs, accounts, budgets, debts, transactions, financialGoals, recurringTransactions,
-        books, readingLogs, bookNotes, healthProfile, healthLogs, workoutLogs,
+        books, readingLogs, bookNotes, readingGroups, readingSessions, healthProfile, healthLogs, workoutLogs,
         updateHealthProfile, addHealthLog, deleteHealthLog,
         isQuickCaptureOpen, openQuickCapture, closeQuickCapture,
         isAICopilotOpen, openAICopilot, closeAICopilot,
@@ -1499,6 +1741,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         addFinancialGoal, updateFinancialGoal, deleteFinancialGoal,
         addRecurringTransaction, updateRecurringTransaction, deleteRecurringTransaction,
         addBook, updateBookProgress, updateBookStatus, addBookNote,
+        startReadingSession, endReadingSession, updateReadingSession,
+        createReadingGroup, updateReadingGroup, deleteReadingGroup, updateReadingGroupProgress,
+        addReadingGroupMember, removeReadingGroupMember,
         addWorkoutLog, deleteWorkoutLog,
         exportDataJSON, importDataJSON, resetToDefaults,
         toastMessage, showToast,

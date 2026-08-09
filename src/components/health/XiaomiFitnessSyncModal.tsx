@@ -1,3 +1,4 @@
+import { todayLocalDate } from '../../lib/dateOnly';
 import React, { useState } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { syncFromHealthConnect, HealthConnectData } from '../../lib/healthConnect';
@@ -26,7 +27,7 @@ export const XiaomiFitnessSyncModal: React.FC<XiaomiFitnessSyncModalProps> = ({ 
 
   const saveHealthLog = (data: { spo2: number; hr: number; sleep: number; steps: number; sys?: number; dia?: number }) => {
     addHealthLog({
-      date: new Date().toISOString().split('T')[0],
+      date: todayLocalDate(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       spO2Pct: data.spo2,
       heartRateBpm: data.hr,
