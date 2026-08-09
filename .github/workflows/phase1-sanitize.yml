@@ -25,7 +25,8 @@ jobs:
           cache: npm
 
       - name: Fix AI service message typing
-        run: sed -i "0,/\.map((message: any) => ({/s//.map((message: any): { role: 'user' | 'assistant'; content: string } => ({/" server/aiService.ts
+        run: |
+          sed -i "0,/role: message?.role === 'assistant' ? 'assistant' : 'user',/s//role: (message?.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',/" server/aiService.ts
 
       - name: Update client settings and remove probes
         run: |
