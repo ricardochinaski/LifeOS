@@ -55,6 +55,20 @@ export const SYNC_STATE_BY_COLLECTION: Record<SyncCollectionName, SyncCollection
   workoutLogs: 'health',
 };
 
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+export function parseSyncBase(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isPlainRecord(parsed) || Object.keys(parsed).length === 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function isSyncCollectionName(value: string): value is SyncCollectionName {
   return (SYNC_COLLECTIONS as readonly string[]).includes(value);
 }
