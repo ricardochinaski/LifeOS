@@ -26,7 +26,7 @@ import { scheduleTaskNotifications } from '../utils/notifications';
 import { addDaysToDateOnly, addMonthsToDateOnly, todayLocalDate } from '../lib/dateOnly';
 import {
   diffStoredCollections, getLocalOnlyEntities, isSyncCollectionName, mergeRemoteWithLocalOnly,
-  normalizeStoredCollection, SYNC_COLLECTIONS, SYNC_STATE_BY_COLLECTION, syncValuesEqual,
+  normalizeStoredCollection, parseSyncBase, SYNC_COLLECTIONS, SYNC_STATE_BY_COLLECTION, syncValuesEqual,
   type SyncCollectionName, type SyncDataset,
 } from '../lib/syncEngine';
 
@@ -194,11 +194,8 @@ const readStoredRecord = (raw: string | null): Record<string, unknown> => {
 };
 
 const syncBaseKey = (uid: string) => `${SYNC_BASE_KEY_PREFIX}${uid}`;
-const readSyncBase = (uid: string): Record<string, unknown> | null => {
-  const raw = localStorage.getItem(syncBaseKey(uid));
-  if (!raw) return null;
-  return readStoredRecord(raw);
-};
+const readSyncBase = (uid: string): Record<string, unknown> | null =>
+  parseSyncBase(localStorage.getItem(syncBaseKey(uid)));
 
 const updateSyncBasePart = (uid: string, key: string, value: unknown) => {
   const base = readSyncBase(uid) || {};
@@ -441,7 +438,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
         const mergedData = mergeRemoteWithLocalOnly(remoteData, localData);
         setterMap[colName](mergedData);
-        updateSyncBasePart(uid, colName, mergedData);
+        if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) {
+          updateSyncBasePart(uid, colName, mergedData);
+        }
         counts[colName] = mergedData.length;
       } catch (e) {
         console.error(`Error loading ${colName}:`, e);
@@ -460,7 +459,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (snap.exists()) {
           const value = snap.data();
           apply(value);
-          updateSyncBasePart(uid, localKey, value);
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
+            updateSyncBasePart(uid, localKey, value);
+          }
           return;
         }
 
@@ -538,7 +539,9 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         (snapshot) => {
           const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
           setterMap[colName](data);
-          updateSyncBasePart(uid, colName, data);
+          if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) {
+            updateSyncBasePart(uid, colName, data);
+          }
         },
         (err) => console.error(`Error in ${colName} listener:`, err)
       );
@@ -551,7 +554,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (snap.exists()) {
           const value = snap.data() as ShiftConfig;
           setShiftConfig(value);
-          updateSyncBasePart(uid, 'shiftConfig', value);
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) updateSyncBasePart(uid, 'shiftConfig', value);
         }
       },
       (err) => console.error('Error in shiftConfig listener:', err)
@@ -563,7 +566,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (snap.exists()) {
           const value = snap.data() as HealthProfile;
           setHealthProfile(value);
-          updateSyncBasePart(uid, 'healthProfile', value);
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) updateSyncBasePart(uid, 'healthProfile', value);
         }
       },
       (err) => console.error('Error in healthProfile listener:', err)
@@ -575,7 +578,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (snap.exists()) {
           const value = snap.data();
           setAppSettings(prev => ({ ...prev, ...value }));
-          updateSyncBasePart(uid, 'appSettings', value);
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) updateSyncBasePart(uid, 'appSettings', value);
         }
       },
       (err) => console.error('Error in appSettings listener:', err)
@@ -584,7 +587,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   // Write helper: updates local state AND writes to Firestore
-  const writeToFirestore = async (uid: string, sub: string, id: string, data: any) => {
+  const writeToFirestore = async (uid: string, sub: string, id: string, data: any, throwOnError = false) => {
     const stateKey = isSyncCollectionName(sub) ? SYNC_STATE_BY_COLLECTION[sub] : undefined;
     if (stateKey) setSyncState(prev => ({ ...prev, [stateKey]: 'syncing' }));
     try {
@@ -595,6 +598,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error(`Error writing ${sub}/${id} to Firestore:`, e);
       if (stateKey) setSyncState(prev => ({ ...prev, [stateKey]: 'error' }));
       showToast(`No se pudo sincronizar ${sub}. Revisa la consola.`);
+      if (throwOnError) throw e;
     }
   };
 
@@ -714,7 +718,7 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
       for (const colName of COLLECTIONS) {
         for (const item of dataByCollection[colName]) {
-          allWrites.push(writeToFirestore(uid, colName, item.id, item));
+          allWrites.push(writeToFirestore(uid, colName, item.id, item, true));
         }
       }
 
