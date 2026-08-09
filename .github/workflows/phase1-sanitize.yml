@@ -24,6 +24,30 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Fix AI service message typing
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('server/aiService.ts')
+          text = path.read_text()
+          old = """    .map((message: any) => ({
+      role: message?.role === 'assistant' ? 'assistant' : 'user',
+      content: typeof message?.content === 'string' ? message.content.slice(0, MAX_MESSAGE_CHARS) : '',
+    }))
+"""
+          new = """    .map((message: any): { role: 'user' | 'assistant'; content: string } => ({
+      role: message?.role === 'assistant' ? 'assistant' : 'user',
+      content: typeof message?.content === 'string'
+        ? message.content.slice(0, MAX_MESSAGE_CHARS)
+        : '',
+    }))
+"""
+          if old not in text:
+              raise SystemExit('normalizeMessages target not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
       - name: Update client settings and remove probes
         run: |
           python3 <<'PY'
