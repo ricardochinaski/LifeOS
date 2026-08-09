@@ -1,0 +1,56 @@
+name: Phase 3 migration
+
+on:
+  push:
+    branches: [agent/phase3-release-sync-ux]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply deterministic migration
+        run: python3 scripts/phase3_migrate.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Dependency security audit
+        run: npm audit --audit-level=high
+
+      - name: Automated tests
+        run: npx --no-install tsx --test tests/**/*.test.ts
+
+      - name: TypeScript validation
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit migrated sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/context/LifeOSContext.tsx src/components/library/LibraryView.tsx
+          if git diff --cached --quiet; then
+            echo "No migration changes to commit"
+          else
+            git commit -m "refactor: wire Phase 3 persistence module"
+            git push origin HEAD:agent/phase3-release-sync-ux
+          fi
