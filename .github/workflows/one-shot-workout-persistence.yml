@@ -1,5 +1,6 @@
 name: One-shot workout persistence fix
 
+# Retry after repairing the startup error-boundary TypeScript check.
 on:
   push:
     branches:
