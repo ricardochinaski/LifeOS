@@ -66,7 +66,7 @@ export function todayLocalDate(): string {
   return formatLocalDate(new Date());
 }
 
-/** Date-only arithmetic independent from timezone/DST. */
+/** Date-only day arithmetic independent from timezone/DST. */
 export function addDaysToDateOnly(value: string, days: number): string {
   const { year, month, day } = parseDateOnly(value);
   const cursor = new Date(Date.UTC(year, month - 1, day));
@@ -75,6 +75,21 @@ export function addDaysToDateOnly(value: string, days: number): string {
     year: cursor.getUTCFullYear(),
     month: cursor.getUTCMonth() + 1,
     day: cursor.getUTCDate(),
+  });
+}
+
+/** Month arithmetic clamps dates such as Jan 31 to the last valid day of February. */
+export function addMonthsToDateOnly(value: string, months: number): string {
+  const { year, month, day } = parseDateOnly(value);
+  const firstOfTarget = new Date(Date.UTC(year, month - 1 + months, 1));
+  const targetYear = firstOfTarget.getUTCFullYear();
+  const targetMonth = firstOfTarget.getUTCMonth();
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+
+  return formatParts({
+    year: targetYear,
+    month: targetMonth + 1,
+    day: Math.min(day, lastDay),
   });
 }
 
