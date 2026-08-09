@@ -29,6 +29,16 @@ jobs:
       - name: Apply Phase 2 migration
         run: |
           if [ -f scripts/phase2_patch.py ]; then
+            python3 - <<'PY'
+          from pathlib import Path
+          patch = Path('scripts/phase2_patch.py')
+          text = patch.read_text()
+          old = "health_marker = '  // Health Actions\\n'"
+          new = "health_marker = '  // Health Actions\\n  const updateHealthProfile'"
+          if old not in text:
+              raise SystemExit('health marker definition not found')
+          patch.write_text(text.replace(old, new, 1))
+          PY
             python3 scripts/phase2_patch.py
           fi
 
