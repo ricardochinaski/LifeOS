@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   addDaysToDateOnly,
+  addMonthsToDateOnly,
   dateOnlyToLocalDate,
   differenceInDateOnlyDays,
   formatLocalDate,
@@ -18,6 +19,8 @@ test('date-only arithmetic is stable across month and leap-day boundaries', () =
   assert.equal(addDaysToDateOnly('2028-02-28', 1), '2028-02-29');
   assert.equal(addDaysToDateOnly('2028-02-29', 1), '2028-03-01');
   assert.equal(addDaysToDateOnly('2026-01-01', -1), '2025-12-31');
+  assert.equal(addMonthsToDateOnly('2026-01-31', 1), '2026-02-28');
+  assert.equal(addMonthsToDateOnly('2028-01-31', 1), '2028-02-29');
   assert.equal(differenceInDateOnlyDays('2026-08-09', '2026-07-24'), 16);
 });
 
