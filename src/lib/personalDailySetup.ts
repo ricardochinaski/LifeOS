@@ -219,6 +219,26 @@ export interface PersonalDailySetupPlan {
 
 const matchesSeed = (actual: string, expected: string) => normalize(actual) === normalize(expected);
 
+const sameDays = (actual?: number[], expected?: number[]) => {
+  const left = actual ?? [];
+  const right = expected ?? [];
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+};
+
+const habitMatchesDailySpec = (habit: Habit, target: DailyHabitSpec) =>
+  matchesSeed(habit.title, target.title) &&
+  habit.description === target.description &&
+  habit.areaId === target.areaId &&
+  habit.color === target.color &&
+  habit.icon === target.icon &&
+  habit.frequency === target.frequency &&
+  habit.targetValue === target.targetValue &&
+  habit.unit === target.unit &&
+  habit.shiftContext === target.shiftContext &&
+  habit.timeOfDay === target.timeOfDay &&
+  sameDays(habit.activeDays, target.activeDays) &&
+  habit.notifyAt == null;
+
 export const buildPersonalDailySetupPlan = (
   projects: Project[],
   tasks: Task[],
@@ -276,11 +296,13 @@ export const buildPersonalDailySetupPlan = (
       if (targetAlreadyExists) {
         deleteHabitIds.push(habit.id);
       } else {
-        updateHabits.push({
-          ...habit,
-          ...target,
-          notifyAt: undefined,
-        });
+        if (!habitMatchesDailySpec(habit, target)) {
+          updateHabits.push({
+            ...habit,
+            ...target,
+            notifyAt: undefined,
+          });
+        }
         desiredHabitTitles.add(normalize(target.title));
       }
     } else {
