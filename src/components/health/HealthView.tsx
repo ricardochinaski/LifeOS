@@ -1,13 +1,123 @@
-import { todayLocalDate } from '../../lib/dateOnly';
-import React, { useState } from 'react';
-import { useLifeOS } from '../../context/LifeOSContext';
-import { HealthLog, WorkoutLog, WorkoutType } from '../../types';
-import { GoogleFitSyncModal } from '../integrations/GoogleFitSyncModal';
+import React, { useMemo, useState } from 'react';
 import {
-  HeartPulse, Activity, Plus,
-  PhoneCall, Droplets, Clock, Trash2, Edit3, X,
-  Weight, Moon, Footprints, Flame, Dumbbell, ChevronDown, ChevronUp, ChevronRight
+  Activity,
+  Dumbbell,
+  Edit3,
+  Flame,
+  Footprints,
+  HeartPulse,
+  Moon,
+  PhoneCall,
+  Plus,
+  Trash2,
+  Weight,
+  X,
 } from 'lucide-react';
+import { useLifeOS } from '../../context/LifeOSContext';
+import { todayLocalDate } from '../../lib/dateOnly';
+import {
+  formatMeasuredNumber,
+  latestHealthLogWith,
+  parseOptionalNumber,
+  sortHealthLogsNewestFirst,
+} from '../../lib/healthSafety';
+import type { HealthLog, WorkoutType } from '../../types';
+import { GoogleFitSyncModal } from '../integrations/GoogleFitSyncModal';
+
+type SleepQuality = NonNullable<HealthLog['sleepQuality']>;
+type LocationContext = NonNullable<HealthLog['locationContext']>;
+
+type ProfileDraft = {
+  bloodType: string;
+  heightCm: string;
+  weightKg: string;
+  altitude: string;
+  emergencyName: string;
+  emergencyKinship: string;
+  emergencyPhone: string;
+  insuranceProvider: string;
+};
+
+type HealthLogDraft = {
+  spO2: string;
+  heartRate: string;
+  systolic: string;
+  diastolic: string;
+  weight: string;
+  sleepHours: string;
+  sleepQuality: '' | SleepQuality;
+  steps: string;
+  calories: string;
+  energy: string;
+  location: LocationContext;
+  symptoms: string;
+  notes: string;
+};
+
+type WorkoutDraft = {
+  type: WorkoutType;
+  duration: string;
+  calories: string;
+  exerciseName: string;
+  sets: string;
+  reps: string;
+  weightKg: string;
+  notes: string;
+  location: LocationContext;
+};
+
+const emptyProfileDraft = (): ProfileDraft => ({
+  bloodType: '',
+  heightCm: '',
+  weightKg: '',
+  altitude: '',
+  emergencyName: '',
+  emergencyKinship: '',
+  emergencyPhone: '',
+  insuranceProvider: '',
+});
+
+const emptyHealthLogDraft = (location: LocationContext): HealthLogDraft => ({
+  spO2: '',
+  heartRate: '',
+  systolic: '',
+  diastolic: '',
+  weight: '',
+  sleepHours: '',
+  sleepQuality: '',
+  steps: '',
+  calories: '',
+  energy: '',
+  location,
+  symptoms: '',
+  notes: '',
+});
+
+const emptyWorkoutDraft = (location: LocationContext): WorkoutDraft => ({
+  type: 'strength',
+  duration: '',
+  calories: '',
+  exerciseName: '',
+  sets: '',
+  reps: '',
+  weightKg: '',
+  notes: '',
+  location,
+});
+
+const workoutLabel = (type: WorkoutType) => {
+  switch (type) {
+    case 'strength': return 'Fuerza';
+    case 'cardio': return 'Cardio';
+    case 'hiit': return 'HIIT';
+    case 'yoga': return 'Yoga';
+    case 'mobility': return 'Movilidad';
+    case 'sports': return 'Deportes';
+    default: return 'Otro';
+  }
+};
+
+const positiveOrUndefined = (value: number) => value > 0 && Number.isFinite(value) ? value : undefined;
 
 export const HealthView: React.FC = () => {
   const {
@@ -19,783 +129,405 @@ export const HealthView: React.FC = () => {
     deleteHealthLog,
     addWorkoutLog,
     deleteWorkoutLog,
-    shiftInfo
+    shiftInfo,
   } = useLifeOS();
 
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [isAddingLogModalOpen, setIsAddingLogModalOpen] = useState(false);
-  const [isAddingWorkoutModalOpen, setIsAddingWorkoutModalOpen] = useState(false);
+  const defaultLocation: LocationContext = shiftInfo.phase === 'work' ? 'mine_camp' : 'rest_home';
   const [isFitModalOpen, setIsFitModalOpen] = useState(false);
-  const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isLogOpen, setIsLogOpen] = useState(false);
+  const [isWorkoutOpen, setIsWorkoutOpen] = useState(false);
+  const [profileDraft, setProfileDraft] = useState<ProfileDraft>(emptyProfileDraft);
+  const [logDraft, setLogDraft] = useState<HealthLogDraft>(() => emptyHealthLogDraft(defaultLocation));
+  const [workoutDraft, setWorkoutDraft] = useState<WorkoutDraft>(() => emptyWorkoutDraft(defaultLocation));
+  const [logError, setLogError] = useState('');
+  const [workoutError, setWorkoutError] = useState('');
 
-  // Health Profile Edit State
-  const [editBloodType, setEditBloodType] = useState(healthProfile.bloodType);
-  const [editHeightCm, setEditHeightCm] = useState(healthProfile.heightCm);
-  const [editWeightKg, setEditWeightKg] = useState(healthProfile.weightKg);
-  const [editEmergencyName, setEditEmergencyName] = useState(healthProfile.emergencyContact.name);
-  const [editEmergencyKin, setEditEmergencyKin] = useState(healthProfile.emergencyContact.kinship);
-  const [editEmergencyPhone, setEditEmergencyPhone] = useState(healthProfile.emergencyContact.phone);
-  const [editInsurance, setEditInsurance] = useState(healthProfile.emergencyContact.insuranceProvider);
-  const [editAltitude, setEditAltitude] = useState(healthProfile.miningAltitudeMeters);
-
-  // New Health Log State
-  const [newSystolic, setNewSystolic] = useState<number | ''>(120);
-  const [newDiastolic, setNewDiastolic] = useState<number | ''>(80);
-  const [newHeartRate, setNewHeartRate] = useState<number | ''>(68);
-  const [newSpO2, setNewSpO2] = useState<number | ''>(96);
-  const [newWeight, setNewWeight] = useState<number | ''>(healthProfile.weightKg);
-  const [newSleepHours, setNewSleepHours] = useState<number | ''>(7.5);
-  const [newSleepQuality, setNewSleepQuality] = useState<'excelente' | 'buena' | 'regular' | 'mala'>('buena');
-  const [newEnergyLevel, setNewEnergyLevel] = useState<number>(8);
-  const [newLocationContext, setNewLocationContext] = useState<'rest_home' | 'mine_camp' | 'transit'>(
-    shiftInfo.phase === 'rest' ? 'rest_home' : 'mine_camp'
+  const sortedLogs = useMemo(() => sortHealthLogsNewestFirst(healthLogs), [healthLogs]);
+  const sortedWorkouts = useMemo(
+    () => [...workoutLogs].sort((a, b) => `${b.date}T${b.time || '00:00'}`.localeCompare(`${a.date}T${a.time || '00:00'}`)),
+    [workoutLogs],
   );
-  const [newSymptomsInput, setNewSymptomsInput] = useState<string>('');
-  const [newNotesInput, setNewNotesInput] = useState<string>('');
 
-  // New Workout Log State
-  const [newWorkoutType, setNewWorkoutType] = useState<WorkoutType>('strength');
-  const [newWorkoutDuration, setNewWorkoutDuration] = useState<number | ''>(45);
-  const [newWorkoutExercises, setNewWorkoutExercises] = useState<{ name: string; sets: number; reps: string; weightKg?: number }[]>([{ name: '', sets: 3, reps: '10-12', weightKg: undefined }]);
-  const [newWorkoutCalories, setNewWorkoutCalories] = useState<number | ''>('');
-  const [newWorkoutNotes, setNewWorkoutNotes] = useState<string>('');
-  const [newWorkoutLocation, setNewWorkoutLocation] = useState<'rest_home' | 'mine_camp' | 'transit'>('rest_home');
+  const latestOverall = sortedLogs[0];
+  const latestSpO2 = latestHealthLogWith(healthLogs, 'spO2Pct');
+  const latestHeartRate = latestHealthLogWith(healthLogs, 'heartRateBpm');
+  const latestSleep = latestHealthLogWith(healthLogs, 'sleepHours');
+  const latestWeight = latestHealthLogWith(healthLogs, 'weightKg');
+  const latestSteps = latestHealthLogWith(healthLogs, 'steps');
+  const latestCalories = latestHealthLogWith(healthLogs, 'calories');
 
-  // Predefined Calisthenics Routines
-  const CALISTHENICS_ROUTINES = {
-    'full-body-basico': {
-      name: 'Full Body Básico (Principiante)',
-      type: 'strength' as WorkoutType,
-      duration: 30,
-      exercises: [
-        { name: 'Flexiones de pecho (knee push-ups si necesario)', sets: 3, reps: '8-12', weightKg: undefined },
-        { name: 'Sentadillas con peso corporal', sets: 3, reps: '15-20', weightKg: undefined },
-        { name: 'Plancha abdominal', sets: 3, reps: '30-45 seg', weightKg: undefined },
-        { name: 'Fondos en banco/silla (tríceps)', sets: 3, reps: '10-15', weightKg: undefined },
-        { name: 'Zancadas alternadas', sets: 3, reps: '10-12 c/pierna', weightKg: undefined },
-        { name: 'Superman (espalda baja)', sets: 3, reps: '12-15', weightKg: undefined },
-      ],
-    },
-    'push-pull-legs': {
-      name: 'Push / Pull / Legs (Intermedio)',
-      type: 'strength' as WorkoutType,
-      duration: 45,
-      exercises: [
-        { name: 'Flexiones diamante (push)', sets: 4, reps: '8-12', weightKg: undefined },
-        { name: 'Flexiones arqueras (push)', sets: 3, reps: '6-8 c/lado', weightKg: undefined },
-        { name: 'Dominadas / Australian pull-ups (pull)', sets: 4, reps: '8-12', weightKg: undefined },
-        { name: 'Face pulls con banda / TRX (pull)', sets: 3, reps: '12-15', weightKg: undefined },
-        { name: 'Pistol squats asistidas / Bulgarias (legs)', sets: 3, reps: '8-10 c/pierna', weightKg: undefined },
-        { name: 'Elevación de talones (legs)', sets: 4, reps: '15-20', weightKg: undefined },
-        { name: 'Plancha con toque de hombro (core)', sets: 3, reps: '20 toques', weightKg: undefined },
-      ],
-    },
-    'upper-body-fuerza': {
-      name: 'Upper Body Fuerza (Avanzado)',
-      type: 'strength' as WorkoutType,
-      duration: 50,
-      exercises: [
-        { name: 'Dominadas estrictas', sets: 5, reps: '5-8', weightKg: undefined },
-        { name: 'Flexiones con palmada / pliométricas', sets: 4, reps: '6-10', weightKg: undefined },
-        { name: 'Muscle-up progresión / Transición', sets: 4, reps: '3-5', weightKg: undefined },
-        { name: 'Fondos en paralelas (dips)', sets: 4, reps: '8-12', weightKg: undefined },
-        { name: 'Flexiones pike / HSPU progresión', sets: 3, reps: '5-8', weightKg: undefined },
-        { name: 'Australian pull-ups ancha', sets: 3, reps: '10-12', weightKg: undefined },
-        { name: 'Plancha a flexión (walkouts)', sets: 3, reps: '8-10', weightKg: undefined },
-      ],
-    },
-    'core-calistenia': {
-      name: 'Core & Movilidad Calisténica',
-      type: 'mobility' as WorkoutType,
-      duration: 20,
-      exercises: [
-        { name: 'Plancha frontal', sets: 3, reps: '45-60 seg', weightKg: undefined },
-        { name: 'Plancha lateral (c/lado)', sets: 3, reps: '30-45 seg', weightKg: undefined },
-        { name: 'Dead bug', sets: 3, reps: '12-15', weightKg: undefined },
-        { name: 'Bird dog', sets: 3, reps: '10-12 c/lado', weightKg: undefined },
-        { name: 'Hollow body hold', sets: 3, reps: '30-45 seg', weightKg: undefined },
-        { name: 'Toes to bar / Rodillas al pecho en barra', sets: 3, reps: '8-12', weightKg: undefined },
-        { name: 'Estiramiento gato-vaca + movilidad torácica', sets: 2, reps: '10 ciclos', weightKg: undefined },
-      ],
-    },
-    'hiit-calistenia': {
-      name: 'HIIT Calisténico (Quema Grasa)',
-      type: 'hiit' as WorkoutType,
-      duration: 20,
-      exercises: [
-        { name: 'Burpees', sets: 4, reps: '40 seg trabajo / 20 seg descanso', weightKg: undefined },
-        { name: 'Mountain climbers', sets: 4, reps: '40 seg / 20 seg', weightKg: undefined },
-        { name: 'Jumping squats', sets: 4, reps: '40 seg / 20 seg', weightKg: undefined },
-        { name: 'Flexiones explosivas', sets: 4, reps: '40 seg / 20 seg', weightKg: undefined },
-        { name: 'Plancha con saltos (plank jacks)', sets: 4, reps: '40 seg / 20 seg', weightKg: undefined },
-      ],
-    },
-    'skill-work': {
-      name: 'Skill Work: Planche / Front Lever / Handstand',
-      type: 'strength' as WorkoutType,
-      duration: 60,
-      exercises: [
-        { name: 'Planche leans / Tuck planche holds', sets: 4, reps: '10-15 seg', weightKg: undefined },
-        { name: 'Front lever tuck / Advanced tuck holds', sets: 4, reps: '10-15 seg', weightKg: undefined },
-        { name: 'Handstand wall holds / Kick-ups', sets: 5, reps: '20-30 seg', weightKg: undefined },
-        { name: 'L-sit / V-sit progresión', sets: 3, reps: '15-20 seg', weightKg: undefined },
-        { name: 'Pseudo planche push-ups', sets: 3, reps: '5-8', weightKg: undefined },
-        { name: 'Dragon flag / Dragon press', sets: 3, reps: '5-8', weightKg: undefined },
-        { name: 'Wrist prep & movilidad muñecas', sets: 2, reps: '2 min', weightKg: undefined },
-      ],
-    },
-    'faena-express': {
-      name: 'Faena Express (15 min, sin equipamiento)',
-      type: 'strength' as WorkoutType,
-      duration: 15,
-      exercises: [
-        { name: 'Flexiones estándar', sets: 3, reps: 'AMRAP', weightKg: undefined },
-        { name: 'Sentadillas salto', sets: 3, reps: 'AMRAP 40 seg', weightKg: undefined },
-        { name: 'Plancha', sets: 3, reps: '45 seg', weightKg: undefined },
-        { name: 'Fondos en cama/literas', sets: 3, reps: 'AMRAP', weightKg: undefined },
-        { name: 'Mountain climbers', sets: 3, reps: '40 seg', weightKg: undefined },
-      ],
-    },
-  } as const;
+  const profileHeight = positiveOrUndefined(healthProfile.heightCm);
+  const profileWeight = positiveOrUndefined(healthProfile.weightKg);
+  const bmi = profileHeight && profileWeight
+    ? profileWeight / Math.pow(profileHeight / 100, 2)
+    : undefined;
 
-  type RoutineKey = keyof typeof CALISTHENICS_ROUTINES;
-
-  const [selectedRoutine, setSelectedRoutine] = useState<RoutineKey | 'custom'>('custom');
-
-  // Calculate BMI
-  const heightInMeters = healthProfile.heightCm / 100;
-  const bmi = heightInMeters > 0 ? (healthProfile.weightKg / (heightInMeters * heightInMeters)).toFixed(1) : '0';
-  const bmiVal = parseFloat(bmi);
-
-  const getBmiCategory = (val: number) => {
-    if (val < 18.5) return { label: 'Bajo peso', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
-    if (val < 25) return { label: 'Peso Normal (Saludable)', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
-    if (val < 30) return { label: 'Sobrepeso leve', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
-    return { label: 'Obesidad', color: 'text-rose-400 bg-rose-500/10 border-rose-500/30' };
+  const openProfile = () => {
+    setProfileDraft({
+      bloodType: healthProfile.bloodType || '',
+      heightCm: profileHeight !== undefined ? String(profileHeight) : '',
+      weightKg: profileWeight !== undefined ? String(profileWeight) : '',
+      altitude: positiveOrUndefined(healthProfile.miningAltitudeMeters) !== undefined ? String(healthProfile.miningAltitudeMeters) : '',
+      emergencyName: healthProfile.emergencyContact.name || '',
+      emergencyKinship: healthProfile.emergencyContact.kinship || '',
+      emergencyPhone: healthProfile.emergencyContact.phone || '',
+      insuranceProvider: healthProfile.emergencyContact.insuranceProvider || '',
+    });
+    setIsProfileOpen(true);
   };
 
-  const bmiInfo = getBmiCategory(bmiVal);
-  const latestLog = healthLogs.length > 0 ? healthLogs[0] : null;
-
-  const getWorkoutTypeIcon = (type: WorkoutType) => {
-    switch (type) {
-      case 'strength': return <Dumbbell className="w-4 h-4" />;
-      case 'cardio': return <Activity className="w-4 h-4" />;
-      case 'hiit': return <Flame className="w-4 h-4" />;
-      case 'yoga': return <HeartPulse className="w-4 h-4" />;
-      case 'mobility': return <Footprints className="w-4 h-4" />;
-      case 'sports': return <Activity className="w-4 h-4" />;
-      default: return <Dumbbell className="w-4 h-4" />;
-    }
+  const openHealthLog = () => {
+    setLogDraft(emptyHealthLogDraft(defaultLocation));
+    setLogError('');
+    setIsLogOpen(true);
   };
 
-  const getWorkoutTypeColor = (type: WorkoutType) => {
-    switch (type) {
-      case 'strength': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-      case 'cardio': return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
-      case 'hiit': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-      case 'yoga': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-      case 'mobility': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
-      case 'sports': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
-    }
+  const openWorkout = () => {
+    setWorkoutDraft(emptyWorkoutDraft(defaultLocation));
+    setWorkoutError('');
+    setIsWorkoutOpen(true);
   };
 
-  const getWorkoutTypeLabel = (type: WorkoutType) => {
-    switch (type) {
-      case 'strength': return 'Fuerza';
-      case 'cardio': return 'Cardio';
-      case 'hiit': return 'HIIT';
-      case 'yoga': return 'Yoga / Movilidad';
-      case 'mobility': return 'Movilidad';
-      case 'sports': return 'Deportes';
-      default: return 'Otro';
-    }
-  };
-
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveProfile = (event: React.FormEvent) => {
+    event.preventDefault();
     updateHealthProfile({
-      bloodType: editBloodType,
-      heightCm: Number(editHeightCm),
-      weightKg: Number(editWeightKg),
-      allergies: [],
-      chronicConditions: [],
-      miningAltitudeMeters: Number(editAltitude),
+      bloodType: profileDraft.bloodType.trim(),
+      heightCm: parseOptionalNumber(profileDraft.heightCm) ?? 0,
+      weightKg: parseOptionalNumber(profileDraft.weightKg) ?? 0,
+      miningAltitudeMeters: parseOptionalNumber(profileDraft.altitude) ?? 0,
       emergencyContact: {
-        name: editEmergencyName,
-        kinship: editEmergencyKin,
-        phone: editEmergencyPhone,
-        insuranceProvider: editInsurance,
+        name: profileDraft.emergencyName.trim(),
+        kinship: profileDraft.emergencyKinship.trim(),
+        phone: profileDraft.emergencyPhone.trim(),
+        insuranceProvider: profileDraft.insuranceProvider.trim(),
       },
     });
-    setIsEditingProfile(false);
+    setIsProfileOpen(false);
   };
 
-  const handleAddLog = (e: React.FormEvent) => {
-    e.preventDefault();
-    const symptoms = newSymptomsInput
-      ? newSymptomsInput.split(',').map((s) => s.trim()).filter(Boolean)
-      : [];
+  const saveHealthLog = (event: React.FormEvent) => {
+    event.preventDefault();
+    setLogError('');
+
+    const spO2Pct = parseOptionalNumber(logDraft.spO2);
+    const heartRateBpm = parseOptionalNumber(logDraft.heartRate);
+    const bloodPressureSys = parseOptionalNumber(logDraft.systolic);
+    const bloodPressureDia = parseOptionalNumber(logDraft.diastolic);
+    const weightKg = parseOptionalNumber(logDraft.weight);
+    const sleepHours = parseOptionalNumber(logDraft.sleepHours);
+    const steps = parseOptionalNumber(logDraft.steps);
+    const calories = parseOptionalNumber(logDraft.calories);
+    const energyLevel = parseOptionalNumber(logDraft.energy);
+    const symptoms = logDraft.symptoms
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const notes = logDraft.notes.trim();
+
+    if ((bloodPressureSys === undefined) !== (bloodPressureDia === undefined)) {
+      setLogError('Para presión arterial completa ambos campos o deja ambos vacíos.');
+      return;
+    }
+
+    const hasRealContent = [
+      spO2Pct,
+      heartRateBpm,
+      bloodPressureSys,
+      bloodPressureDia,
+      weightKg,
+      sleepHours,
+      steps,
+      calories,
+      energyLevel,
+    ].some((value) => value !== undefined) || Boolean(logDraft.sleepQuality) || symptoms.length > 0 || Boolean(notes);
+
+    if (!hasRealContent) {
+      setLogError('Ingresa al menos un dato real antes de guardar.');
+      return;
+    }
 
     addHealthLog({
       date: todayLocalDate(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      bloodPressureSys: newSystolic !== '' ? Number(newSystolic) : undefined,
-      bloodPressureDia: newDiastolic !== '' ? Number(newDiastolic) : undefined,
-      heartRateBpm: newHeartRate !== '' ? Number(newHeartRate) : undefined,
-      spO2Pct: newSpO2 !== '' ? Number(newSpO2) : undefined,
-      weightKg: newWeight !== '' ? Number(newWeight) : undefined,
-      sleepHours: newSleepHours !== '' ? Number(newSleepHours) : undefined,
-      sleepQuality: newSleepQuality,
-      energyLevel: newEnergyLevel,
-      locationContext: newLocationContext,
-      altitudeSymptoms: symptoms,
-      notes: newNotesInput,
+      spO2Pct,
+      heartRateBpm,
+      bloodPressureSys,
+      bloodPressureDia,
+      weightKg,
+      sleepHours,
+      sleepQuality: logDraft.sleepQuality || undefined,
+      steps,
+      calories,
+      energyLevel,
+      altitudeSymptoms: symptoms.length ? symptoms : undefined,
+      locationContext: logDraft.location,
+      notes: notes || undefined,
     });
 
-    setIsAddingLogModalOpen(false);
-    setNewSymptomsInput('');
-    setNewNotesInput('');
+    setIsLogOpen(false);
   };
 
-  const handleAddWorkout = (e: React.FormEvent) => {
-    e.preventDefault();
-    const validExercises = newWorkoutExercises.filter(ex => ex.name.trim() && ex.sets > 0);
-    if (validExercises.length === 0) return;
+  const saveWorkout = (event: React.FormEvent) => {
+    event.preventDefault();
+    setWorkoutError('');
+
+    const durationMinutes = parseOptionalNumber(workoutDraft.duration);
+    const caloriesBurned = parseOptionalNumber(workoutDraft.calories);
+    const sets = parseOptionalNumber(workoutDraft.sets);
+    const weightKg = parseOptionalNumber(workoutDraft.weightKg);
+    const exerciseName = workoutDraft.exerciseName.trim();
+    const reps = workoutDraft.reps.trim();
+
+    if (!durationMinutes || durationMinutes <= 0) {
+      setWorkoutError('Ingresa la duración real del entrenamiento.');
+      return;
+    }
+
+    if (exerciseName && (!sets || !reps)) {
+      setWorkoutError('Si registras un ejercicio, completa también series y repeticiones.');
+      return;
+    }
 
     addWorkoutLog({
       date: todayLocalDate(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: newWorkoutType,
-      durationMinutes: Number(newWorkoutDuration) || 0,
-      exercises: validExercises,
-      caloriesBurned: newWorkoutCalories !== '' ? Number(newWorkoutCalories) : undefined,
-      notes: newWorkoutNotes,
-      locationContext: newWorkoutLocation,
+      type: workoutDraft.type,
+      durationMinutes,
+      caloriesBurned,
+      locationContext: workoutDraft.location,
+      notes: workoutDraft.notes.trim() || undefined,
+      exercises: exerciseName
+        ? [{ name: exerciseName, sets: Number(sets), reps, weightKg }]
+        : [],
     });
 
-    setIsAddingWorkoutModalOpen(false);
-    setNewWorkoutExercises([{ name: '', sets: 3, reps: '10-12', weightKg: undefined }]);
-    setNewWorkoutNotes('');
-    setNewWorkoutCalories('');
+    setIsWorkoutOpen(false);
   };
 
-  const addExerciseRow = () => {
-    setNewWorkoutExercises(prev => [...prev, { name: '', sets: 3, reps: '10-12', weightKg: undefined }]);
+  const confirmDeleteHealthLog = (id: string, date: string) => {
+    if (window.confirm(`¿Eliminar el registro de salud del ${date}? Esta acción no se puede deshacer.`)) {
+      deleteHealthLog(id);
+    }
   };
 
-  const removeExerciseRow = (index: number) => {
-    setNewWorkoutExercises(prev => prev.filter((_, i) => i !== index));
+  const confirmDeleteWorkout = (id: string, date: string) => {
+    if (window.confirm(`¿Eliminar el entrenamiento del ${date}? Esta acción no se puede deshacer.`)) {
+      deleteWorkoutLog(id);
+    }
   };
 
-  const updateExercise = (index: number, field: string, value: string | number) => {
-    setNewWorkoutExercises(prev => prev.map((ex, i) => i === index ? { ...ex, [field]: value } : ex));
-  };
-
-  const applyRoutine = (key: RoutineKey) => {
-    const routine = CALISTHENICS_ROUTINES[key];
-    setSelectedRoutine(key);
-    setNewWorkoutType(routine.type);
-    setNewWorkoutDuration(routine.duration);
-    setNewWorkoutExercises(routine.exercises.map(ex => ({ ...ex })));
-  };
-
-  const clearRoutine = () => {
-    setSelectedRoutine('custom');
-    setNewWorkoutExercises([{ name: '', sets: 3, reps: '10-12', weightKg: undefined }]);
-  };
+  const metricCard = (label: string, value: string, meta: string, icon: React.ReactNode) => (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center gap-2 text-slate-400">{icon}<span className="text-[10px] font-black uppercase tracking-wide">{label}</span></div>
+      <p className="mt-2 text-xl font-black text-slate-950 dark:text-white">{value}</p>
+      <p className="mt-1 text-[10px] text-slate-400">{meta}</p>
+    </div>
+  );
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))] animate-fade-in text-slate-900 dark:text-white">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-6 rounded-3xl shadow-xl backdrop-blur-md">
-        <div className="flex items-center gap-4">
-          <div className="p-3.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            <HeartPulse className="w-8 h-8" />
+    <div className="mx-auto max-w-6xl space-y-5 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] animate-fade-in">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-emerald-500/15 p-3 text-emerald-500"><HeartPulse className="h-6 w-6" /></div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-500">Salud · datos reales</p>
+              <h1 className="mt-1 text-xl font-black text-slate-950 dark:text-white">Salud y actividad</h1>
+              <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-500 dark:text-slate-400">
+                Registra y sincroniza mediciones sin completar valores faltantes ni interpretar clínicamente los resultados.
+              </p>
+            </div>
           </div>
-          <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">Salud y Biometría</span>
-            <h1 className="text-2xl font-black text-white">Ficha Médica</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Control biométrico, peso, pasos y sincronización con Google Fit.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setIsFitModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer"
-          >
-            <Activity className="w-4 h-4" />
-            <span>Sincronizar con Google Fit</span>
-          </button>
-
-          <button
-            onClick={() => setIsEditingProfile(!isEditingProfile)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold transition-all shadow-sm"
-          >
-            <Edit3 className="w-4 h-4 text-indigo-400" />
-            <span>{isEditingProfile ? 'Cerrar Edición' : 'Editar Ficha'}</span>
-          </button>
-
-          <button
-            onClick={() => setIsAddingLogModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold transition-all shadow-lg shadow-emerald-500/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Registrar Constantes</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Edit Profile */}
-      {isEditingProfile && (
-        <form onSubmit={handleSaveProfile} className="p-6 rounded-3xl bg-slate-900 border border-indigo-500/40 space-y-4 shadow-2xl animate-fade-in">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h3 className="text-sm font-bold text-indigo-400 flex items-center gap-2">
-              <Edit3 className="w-4 h-4" />
-              Editar Ficha Médica
-            </h3>
-            <button type="button" onClick={() => setIsEditingProfile(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
-              <X className="w-4 h-4" />
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <button type="button" onClick={() => setIsFitModalOpen(true)} className="min-h-11 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-600 dark:text-emerald-300">
+              Sincronizar salud
+            </button>
+            <button type="button" onClick={openProfile} className="min-h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <span className="inline-flex items-center gap-1.5"><Edit3 className="h-4 w-4" /> Editar ficha</span>
+            </button>
+            <button type="button" onClick={openHealthLog} className="min-h-11 rounded-2xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950">
+              <span className="inline-flex items-center gap-1.5"><Plus className="h-4 w-4" /> Registrar datos</span>
+            </button>
+            <button type="button" onClick={openWorkout} className="min-h-11 rounded-2xl bg-amber-400 px-3 py-2 text-xs font-black text-slate-950">
+              <span className="inline-flex items-center gap-1.5"><Dumbbell className="h-4 w-4" /> Entrenamiento</span>
             </button>
           </div>
+        </div>
+      </section>
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-300">Grupo Sanguíneo</label>
-              <input type="text" value={editBloodType} onChange={(e) => setEditBloodType(e.target.value)} placeholder="Ej. O Rh+" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-300">Estatura (cm)</label>
-              <input type="number" value={editHeightCm} onChange={(e) => setEditHeightCm(Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-300">Peso (kg)</label>
-              <input type="number" step="0.1" value={editWeightKg} onChange={(e) => setEditWeightKg(Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-300">Altitud Faena (msnm)</label>
-              <input type="number" value={editAltitude} onChange={(e) => setEditAltitude(Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-            </div>
-          </div>
+      <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {metricCard('SpO₂', latestSpO2?.spO2Pct !== undefined ? `${formatMeasuredNumber(latestSpO2.spO2Pct, 1)}%` : '—', latestSpO2 ? `Medido ${latestSpO2.date}` : 'Sin medición', <Activity className="h-4 w-4" />)}
+        {metricCard('Pulso', latestHeartRate?.heartRateBpm !== undefined ? `${formatMeasuredNumber(latestHeartRate.heartRateBpm, 0)} bpm` : '—', latestHeartRate ? `Medido ${latestHeartRate.date}` : 'Sin medición', <HeartPulse className="h-4 w-4" />)}
+        {metricCard('Sueño', latestSleep?.sleepHours !== undefined ? `${formatMeasuredNumber(latestSleep.sleepHours, 2)} h` : '—', latestSleep ? `Registrado ${latestSleep.date}` : 'Sin registro', <Moon className="h-4 w-4" />)}
+        {metricCard('Peso', latestWeight?.weightKg !== undefined ? `${formatMeasuredNumber(latestWeight.weightKg, 1)} kg` : profileWeight !== undefined ? `${formatMeasuredNumber(profileWeight, 1)} kg` : '—', latestWeight ? `Medido ${latestWeight.date}` : profileWeight !== undefined ? 'Dato de ficha' : 'Sin dato', <Weight className="h-4 w-4" />)}
+        {metricCard('Pasos', latestSteps?.steps !== undefined ? formatMeasuredNumber(latestSteps.steps, 0) : '—', latestSteps ? `Registrado ${latestSteps.date}` : 'Sin registro', <Footprints className="h-4 w-4" />)}
+        {metricCard('Calorías', latestCalories?.calories !== undefined ? `${formatMeasuredNumber(latestCalories.calories, 0)} kcal` : '—', latestCalories ? `Registrado ${latestCalories.date}` : 'Sin registro', <Flame className="h-4 w-4" />)}
+        {metricCard('IMC calculado', bmi !== undefined ? formatMeasuredNumber(bmi, 1) : '—', profileHeight && profileWeight ? `${formatMeasuredNumber(profileWeight, 1)} kg · ${formatMeasuredNumber(profileHeight, 1)} cm` : 'Completa peso y estatura', <Activity className="h-4 w-4" />)}
+        {metricCard('Contacto', healthProfile.emergencyContact.name?.trim() || '—', healthProfile.emergencyContact.phone?.trim() || 'Sin teléfono', <PhoneCall className="h-4 w-4" />)}
+      </section>
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-2 border-t border-slate-800">
-            <div>
-              <label className="text-xs font-bold text-slate-300">Contacto Emergencia</label>
-              <input type="text" value={editEmergencyName} onChange={(e) => setEditEmergencyName(e.target.value)} placeholder="Nombre completo" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-300">Parentesco</label>
-              <input type="text" value={editEmergencyKin} onChange={(e) => setEditEmergencyKin(e.target.value)} placeholder="Ej. Cónyuge" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-300">Teléfono</label>
-              <input type="text" value={editEmergencyPhone} onChange={(e) => setEditEmergencyPhone(e.target.value)} placeholder="+56 9..." className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-300">Previsión / Isapre</label>
-              <input type="text" value={editInsurance} onChange={(e) => setEditInsurance(e.target.value)} placeholder="Ej. Banmédica + ACHS" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-            </div>
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Historial</p>
+            <h2 className="mt-1 text-sm font-black text-slate-950 dark:text-white">Registros de salud · {sortedLogs.length}</h2>
           </div>
-
-          <div className="flex justify-end gap-2 pt-3">
-            <button type="button" onClick={() => setIsEditingProfile(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white">Cancelar</button>
-            <button type="submit" className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg">Guardar</button>
-          </div>
-        </form>
-      )}
-
-      {/* Biometrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase text-slate-400">Grupo Sanguíneo</span>
-            <span className="p-2 rounded-xl bg-rose-500/20 text-rose-400"><HeartPulse className="w-4 h-4" /></span>
-          </div>
-          <div className="text-2xl font-black text-white">{healthProfile.bloodType}</div>
+          <button type="button" onClick={openHealthLog} className="min-h-11 rounded-2xl border border-slate-200 px-3 text-xs font-black text-slate-700 dark:border-slate-700 dark:text-slate-200">+ Nuevo</button>
         </div>
 
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase text-slate-400">IMC</span>
-            <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400"><Activity className="w-4 h-4" /></span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-white">{bmi}</span>
-            <span className="text-xs text-slate-400">({healthProfile.weightKg} kg / {healthProfile.heightCm} cm)</span>
-          </div>
-          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border ${bmiInfo.color}`}>{bmiInfo.label}</span>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase text-slate-400">SpO2 Reciente</span>
-            <span className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400"><Droplets className="w-4 h-4" /></span>
-          </div>
-          <div className="text-2xl font-black text-indigo-400">{latestLog?.spO2Pct ? `${latestLog.spO2Pct}%` : '97%'}</div>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase text-slate-400">Contacto Emergencia</span>
-            <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400"><PhoneCall className="w-4 h-4" /></span>
-          </div>
-          <div className="text-sm font-bold text-white truncate">{healthProfile.emergencyContact.name}</div>
-          <p className="text-[11px] text-slate-400">{healthProfile.emergencyContact.kinship} · <span className="font-mono text-emerald-400">{healthProfile.emergencyContact.phone}</span></p>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase text-slate-400">Peso</span>
-            <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400"><Weight className="w-4 h-4" /></span>
-          </div>
-          <div className="text-2xl font-black text-white">{latestLog?.weightKg ?? healthProfile.weightKg} kg</div>
-          <p className="text-[11px] text-slate-400">{latestLog?.weightKg ? `Registrado ${latestLog.date}` : 'Peso actual de ficha'}</p>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase text-slate-400">Sueño</span>
-            <span className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400"><Moon className="w-4 h-4" /></span>
-          </div>
-          <div className="text-2xl font-black text-indigo-400">{latestLog?.sleepHours ? `${latestLog.sleepHours} hrs` : '--'}</div>
-          <p className="text-[11px] text-slate-400">{latestLog?.sleepQuality ? `Calidad ${latestLog.sleepQuality} · ${latestLog.date}` : 'Sin datos de sueño'}</p>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase text-slate-400">Pasos</span>
-            <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400"><Footprints className="w-4 h-4" /></span>
-          </div>
-          <div className="text-2xl font-black text-amber-400">{latestLog?.steps ? latestLog.steps.toLocaleString() : '--'}</div>
-          <p className="text-[11px] text-slate-400">{latestLog?.steps ? `Último registro ${latestLog.date}` : 'Sin datos de pasos'}</p>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase text-slate-400">Calorías</span>
-            <span className="p-2 rounded-xl bg-rose-500/20 text-rose-400"><Flame className="w-4 h-4" /></span>
-          </div>
-          <div className="text-2xl font-black text-rose-400">{latestLog?.calories ? `${latestLog.calories.toLocaleString()} kcal` : '--'}</div>
-          <p className="text-[11px] text-slate-400">{latestLog?.calories ? `Registrado ${latestLog.date}` : 'Sin datos de calorías'}</p>
-        </div>
-      </div>
-
-      {/* History */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-900 border border-slate-800">
-          <h2 className="text-base font-bold text-white">Historial de Constantes ({healthLogs.length})</h2>
-          <button onClick={() => setIsAddingLogModalOpen(true)} className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all">+ Nuevo</button>
-        </div>
-
-        <div className="space-y-3">
-          {healthLogs.map((log) => (
-            <div key={log.id} className="p-5 rounded-3xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-2xl bg-slate-800 text-slate-300"><Activity className="w-5 h-5 text-indigo-400" /></div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white">{log.date} {log.time ? `· ${log.time}` : ''}</span>
-                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border ${log.locationContext === 'mine_camp' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'}`}>
-                      {log.locationContext === 'mine_camp' ? 'Faena ⛏️' : 'Descanso 🌿'}
+        <div className="mt-4 space-y-2">
+          {sortedLogs.map((log) => (
+            <article key={log.id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-black text-slate-950 dark:text-white">{log.date}{log.time ? ` · ${log.time}` : ''}</p>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                      {log.locationContext === 'mine_camp' ? 'Faena' : log.locationContext === 'transit' ? 'Tránsito' : 'Descanso'}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-3 mt-1 text-xs text-slate-300">
-                    {log.bloodPressureSys && <span>P.A: <strong className="text-white">{log.bloodPressureSys}/{log.bloodPressureDia} mmHg</strong></span>}
-                    {log.spO2Pct && <span>SpO2: <strong className="text-indigo-400">{log.spO2Pct}%</strong></span>}
-                    {log.heartRateBpm && <span>Pulso: <strong className="text-rose-400">{log.heartRateBpm} bpm</strong></span>}
-                    {log.sleepHours && <span>Sueño: <strong className="text-emerald-400">{log.sleepHours} hrs</strong></span>}
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    {log.spO2Pct !== undefined && <span>SpO₂ <strong className="text-slate-900 dark:text-white">{formatMeasuredNumber(log.spO2Pct, 1)}%</strong></span>}
+                    {log.heartRateBpm !== undefined && <span>Pulso <strong className="text-slate-900 dark:text-white">{formatMeasuredNumber(log.heartRateBpm, 0)} bpm</strong></span>}
+                    {log.bloodPressureSys !== undefined && log.bloodPressureDia !== undefined && <span>P.A. <strong className="text-slate-900 dark:text-white">{formatMeasuredNumber(log.bloodPressureSys, 0)}/{formatMeasuredNumber(log.bloodPressureDia, 0)}</strong></span>}
+                    {log.sleepHours !== undefined && <span>Sueño <strong className="text-slate-900 dark:text-white">{formatMeasuredNumber(log.sleepHours, 2)} h</strong></span>}
+                    {log.weightKg !== undefined && <span>Peso <strong className="text-slate-900 dark:text-white">{formatMeasuredNumber(log.weightKg, 1)} kg</strong></span>}
+                    {log.steps !== undefined && <span>Pasos <strong className="text-slate-900 dark:text-white">{formatMeasuredNumber(log.steps, 0)}</strong></span>}
+                    {log.calories !== undefined && <span>Calorías <strong className="text-slate-900 dark:text-white">{formatMeasuredNumber(log.calories, 0)}</strong></span>}
                   </div>
-                  {log.notes && <p className="text-xs text-slate-400 italic mt-1">{log.notes}</p>}
+                  {log.notes && <p className="mt-2 text-xs text-slate-500">{log.notes}</p>}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => confirmDeleteHealthLog(log.id, log.date)}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 text-xs font-black text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+                >
+                  <Trash2 className="h-4 w-4" /> Eliminar
+                </button>
               </div>
-              <button onClick={() => deleteHealthLog(log.id)} className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950/80 text-slate-500 hover:text-rose-400 transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
-            </div>
+            </article>
           ))}
-        </div>
-      </div>
-
-      {/* Workout Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-900 border border-slate-800">
-          <div className="flex items-center gap-2">
-            <Dumbbell className="w-5 h-5 text-amber-400" />
-            <h2 className="text-base font-bold text-white">Entrenamientos ({workoutLogs.length})</h2>
-          </div>
-          <button onClick={() => setIsAddingWorkoutModalOpen(true)} className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all">+ Entrenamiento</button>
-        </div>
-
-        <div className="space-y-3">
-          {workoutLogs.map((log) => (
-            <div key={log.id} className="p-5 rounded-3xl bg-slate-900 border border-slate-800">
-              <div className="flex items-start justify-between gap-4 mb-3">
-                <div className="flex items-center gap-3">
-                  <div className={`p-3 rounded-2xl ${getWorkoutTypeColor(log.type)}`}>
-                    {getWorkoutTypeIcon(log.type)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white">{log.date} {log.time ? `· ${log.time}` : ''}</span>
-                      <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border ${getWorkoutTypeColor(log.type)}`}>
-                        {getWorkoutTypeLabel(log.type)}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-slate-800 text-slate-400 border-slate-700">
-                        {log.durationMinutes} min
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setExpandedWorkout(expandedWorkout === log.id ? null : log.id)}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                    title={expandedWorkout === log.id ? 'Colapsar' : 'Expandir'}
-                  >
-                    {expandedWorkout === log.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                  <button onClick={() => deleteWorkoutLog(log.id)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/80 text-slate-500 hover:text-rose-400 transition-colors" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3 text-xs text-slate-300">
-                {log.exercises.length > 0 && (
-                  <span className="px-2 py-1 rounded-lg bg-slate-800/50 border border-slate-700">
-                    {log.exercises.length} ejercicios
-                  </span>
-                )}
-                {log.caloriesBurned && <span className="px-2 py-1 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">{log.caloriesBurned} kcal</span>}
-                {log.locationContext && <span className={`px-2 py-1 rounded-lg ${log.locationContext === 'mine_camp' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'}`}>
-                  {log.locationContext === 'mine_camp' ? 'Faena ⛏️' : 'Descanso 🌿'}
-                </span>}
-              </div>
-
-              {expandedWorkout === log.id && (
-                <div className="mt-3 pt-3 border-t border-slate-800 space-y-2">
-                  {log.exercises.map((ex, idx) => (
-                    <div key={idx} className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                      <p className="text-xs font-bold text-white">{ex.name}</p>
-                      <div className="flex flex-wrap gap-3 mt-1 text-[10px] text-slate-300">
-                        <span>Series: <strong className="text-white">{ex.sets}</strong></span>
-                        <span>Reps: <strong className="text-white">{ex.reps}</strong></span>
-                        {ex.weightKg && <span>Peso: <strong className="text-amber-400">{ex.weightKg} kg</strong></span>}
-                        {ex.rpe && <span>RPE: <strong className="text-rose-400">{ex.rpe}/10</strong></span>}
-                      </div>
-                    </div>
-                  ))}
-                  {log.notes && <p className="text-xs text-slate-400 italic">{log.notes}</p>}
-                </div>
-              )}
-            </div>
-          ))}
-          {workoutLogs.length === 0 && (
-            <div className="p-8 text-center text-xs text-slate-500">
-              No hay entrenamientos registrados. Agrega tu primera sesión de fuerza, cardio o yoga.
-            </div>
+          {sortedLogs.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500 dark:border-slate-700">Sin registros de salud guardados.</div>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Add Health Log Modal */}
-      {isAddingLogModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
-          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 my-8">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white flex items-center gap-2"><HeartPulse className="w-5 h-5 text-emerald-400" /> Nuevo Registro</h2>
-              <button onClick={() => setIsAddingLogModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-
-            <form onSubmit={handleAddLog} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-300">Contexto</label>
-                  <select value={newLocationContext} onChange={(e) => setNewLocationContext(e.target.value as any)} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white">
-                    <option value="mine_camp">⛏️ Campamento Minero</option>
-                    <option value="rest_home">🌿 Casa / Descanso</option>
-                    <option value="transit">🚌 En Tránsito</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-300">SpO2 (%)</label>
-                  <input type="number" value={newSpO2} onChange={(e) => setNewSpO2(e.target.value === '' ? '' : Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-300">P.A. Sistólica</label>
-                  <input type="number" value={newSystolic} onChange={(e) => setNewSystolic(e.target.value === '' ? '' : Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-300">P.A. Diastólica</label>
-                  <input type="number" value={newDiastolic} onChange={(e) => setNewDiastolic(e.target.value === '' ? '' : Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-300">Pulso (bpm)</label>
-                  <input type="number" value={newHeartRate} onChange={(e) => setNewHeartRate(e.target.value === '' ? '' : Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-300">Sueño (hrs)</label>
-                  <input type="number" step="0.5" value={newSleepHours} onChange={(e) => setNewSleepHours(e.target.value === '' ? '' : Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-300">Calidad</label>
-                  <select value={newSleepQuality} onChange={(e) => setNewSleepQuality(e.target.value as any)} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white">
-                    <option value="excelente">Excelente ✨</option>
-                    <option value="buena">Buena 👍</option>
-                    <option value="regular">Regular 😐</option>
-                    <option value="mala">Mala 💤</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300">Síntomas de Altura (separados por coma)</label>
-                <input type="text" value={newSymptomsInput} onChange={(e) => setNewSymptomsInput(e.target.value)} placeholder="Ej. Cefalea leve, Sequedad nasal" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300">Notas</label>
-                <input type="text" value={newNotesInput} onChange={(e) => setNewNotesInput(e.target.value)} placeholder="Ej. Buena recuperación tras turno" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-                <button type="button" onClick={() => setIsAddingLogModalOpen(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white">Cancelar</button>
-                <button type="submit" className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg">Guardar</button>
-              </div>
-            </form>
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actividad</p>
+            <h2 className="mt-1 text-sm font-black text-slate-950 dark:text-white">Entrenamientos · {sortedWorkouts.length}</h2>
           </div>
+          <button type="button" onClick={openWorkout} className="min-h-11 rounded-2xl border border-amber-300 bg-amber-50 px-3 text-xs font-black text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">+ Entreno</button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {sortedWorkouts.map((workout) => (
+            <article key={workout.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-black text-slate-950 dark:text-white">{workoutLabel(workout.type)} · {workout.durationMinutes} min</p>
+                <p className="mt-1 text-[10px] text-slate-400">{workout.date}{workout.time ? ` · ${workout.time}` : ''}{workout.caloriesBurned !== undefined ? ` · ${formatMeasuredNumber(workout.caloriesBurned, 0)} kcal` : ''}</p>
+                {workout.exercises.length > 0 && <p className="mt-1 text-[10px] text-slate-500">{workout.exercises.map((exercise) => exercise.name).join(', ')}</p>}
+                {workout.notes && <p className="mt-1 text-xs text-slate-500">{workout.notes}</p>}
+              </div>
+              <button type="button" onClick={() => confirmDeleteWorkout(workout.id, workout.date)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 text-xs font-black text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+                <Trash2 className="h-4 w-4" /> Eliminar
+              </button>
+            </article>
+          ))}
+          {sortedWorkouts.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500 dark:border-slate-700">Sin entrenamientos registrados.</div>}
+        </div>
+      </section>
+
+      {isProfileOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-sm">
+          <form onSubmit={saveProfile} className="my-8 w-full max-w-2xl space-y-4 rounded-3xl border border-slate-700 bg-slate-900 p-5 text-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div><h2 className="text-base font-black">Editar ficha</h2><p className="mt-1 text-[10px] text-slate-400">Deja en blanco cualquier dato que no quieras conservar.</p></div>
+              <button type="button" onClick={() => setIsProfileOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-xs font-bold text-slate-300">Grupo sanguíneo<input value={profileDraft.bloodType} onChange={(e) => setProfileDraft((draft) => ({ ...draft, bloodType: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Estatura (cm)<input type="number" step="0.1" value={profileDraft.heightCm} onChange={(e) => setProfileDraft((draft) => ({ ...draft, heightCm: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Peso de ficha (kg)<input type="number" step="0.1" value={profileDraft.weightKg} onChange={(e) => setProfileDraft((draft) => ({ ...draft, weightKg: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Altitud de faena (msnm)<input type="number" value={profileDraft.altitude} onChange={(e) => setProfileDraft((draft) => ({ ...draft, altitude: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            </div>
+            <div className="grid grid-cols-1 gap-3 border-t border-slate-800 pt-4 sm:grid-cols-2">
+              <label className="text-xs font-bold text-slate-300">Contacto de emergencia<input value={profileDraft.emergencyName} onChange={(e) => setProfileDraft((draft) => ({ ...draft, emergencyName: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Parentesco<input value={profileDraft.emergencyKinship} onChange={(e) => setProfileDraft((draft) => ({ ...draft, emergencyKinship: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Teléfono<input value={profileDraft.emergencyPhone} onChange={(e) => setProfileDraft((draft) => ({ ...draft, emergencyPhone: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Previsión / seguro<input value={profileDraft.insuranceProvider} onChange={(e) => setProfileDraft((draft) => ({ ...draft, insuranceProvider: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3"><button type="button" onClick={() => setIsProfileOpen(false)} className="min-h-11 rounded-xl px-4 text-xs font-bold text-slate-300">Cancelar</button><button type="submit" className="min-h-11 rounded-xl bg-emerald-500 px-5 text-xs font-black text-slate-950">Guardar ficha</button></div>
+          </form>
         </div>
       )}
 
-      {/* Add Workout Log Modal */}
-      {isAddingWorkoutModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
-          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white flex items-center gap-2"><Dumbbell className="w-5 h-5 text-amber-400" /> Nuevo Entrenamiento</h2>
-              <button onClick={() => setIsAddingWorkoutModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+      {isLogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-sm">
+          <form onSubmit={saveHealthLog} className="my-8 w-full max-w-2xl space-y-4 rounded-3xl border border-slate-700 bg-slate-900 p-5 text-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3"><div><h2 className="text-base font-black">Registrar datos de salud</h2><p className="mt-1 text-[10px] text-slate-400">Todos los campos son opcionales. LifeOS guarda solo lo que completas.</p></div><button type="button" onClick={() => setIsLogOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-4 w-4" /></button></div>
+
+            <label className="block text-xs font-bold text-slate-300">Contexto<select value={logDraft.location} onChange={(e) => setLogDraft((draft) => ({ ...draft, location: e.target.value as LocationContext }))} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white"><option value="mine_camp">Faena</option><option value="rest_home">Casa / descanso</option><option value="transit">Tránsito</option></select></label>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <label className="text-xs font-bold text-slate-300">SpO₂ (%)<input type="number" step="0.1" value={logDraft.spO2} onChange={(e) => setLogDraft((draft) => ({ ...draft, spO2: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Pulso (bpm)<input type="number" value={logDraft.heartRate} onChange={(e) => setLogDraft((draft) => ({ ...draft, heartRate: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Peso (kg)<input type="number" step="0.1" value={logDraft.weight} onChange={(e) => setLogDraft((draft) => ({ ...draft, weight: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-bold text-slate-300">P.A. sistólica<input type="number" value={logDraft.systolic} onChange={(e) => setLogDraft((draft) => ({ ...draft, systolic: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">P.A. diastólica<input type="number" value={logDraft.diastolic} onChange={(e) => setLogDraft((draft) => ({ ...draft, diastolic: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <label className="text-xs font-bold text-slate-300">Sueño (h)<input type="number" step="0.25" value={logDraft.sleepHours} onChange={(e) => setLogDraft((draft) => ({ ...draft, sleepHours: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Calidad del sueño<select value={logDraft.sleepQuality} onChange={(e) => setLogDraft((draft) => ({ ...draft, sleepQuality: e.target.value as '' | SleepQuality }))} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white"><option value="">Sin registrar</option><option value="excelente">Excelente</option><option value="buena">Buena</option><option value="regular">Regular</option><option value="mala">Mala</option></select></label>
+              <label className="text-xs font-bold text-slate-300">Energía 1–10<select value={logDraft.energy} onChange={(e) => setLogDraft((draft) => ({ ...draft, energy: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white"><option value="">Sin registrar</option>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-bold text-slate-300">Pasos<input type="number" value={logDraft.steps} onChange={(e) => setLogDraft((draft) => ({ ...draft, steps: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Calorías<input type="number" value={logDraft.calories} onChange={(e) => setLogDraft((draft) => ({ ...draft, calories: e.target.value }))} placeholder="Sin registrar" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            </div>
+            <label className="block text-xs font-bold text-slate-300">Síntomas / observaciones de altura<input value={logDraft.symptoms} onChange={(e) => setLogDraft((draft) => ({ ...draft, symptoms: e.target.value }))} placeholder="Separados por coma; opcional" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            <label className="block text-xs font-bold text-slate-300">Notas<textarea value={logDraft.notes} onChange={(e) => setLogDraft((draft) => ({ ...draft, notes: e.target.value }))} placeholder="Opcional" rows={2} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            {logError && <p className="rounded-xl border border-rose-900 bg-rose-950/40 p-3 text-xs font-bold text-rose-300">{logError}</p>}
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3"><button type="button" onClick={() => setIsLogOpen(false)} className="min-h-11 rounded-xl px-4 text-xs font-bold text-slate-300">Cancelar</button><button type="submit" className="min-h-11 rounded-xl bg-emerald-500 px-5 text-xs font-black text-slate-950">Guardar registro</button></div>
+          </form>
+        </div>
+      )}
 
-            <form onSubmit={handleAddWorkout} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-300">Tipo</label>
-                  <select value={newWorkoutType} onChange={(e) => setNewWorkoutType(e.target.value as WorkoutType)} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white">
-                    <option value="strength">🏋️ Fuerza</option>
-                    <option value="cardio">🏃 Cardio</option>
-                    <option value="hiit">🔥 HIIT</option>
-                    <option value="yoga">🧘 Yoga</option>
-                    <option value="mobility">🤸 Movilidad</option>
-                    <option value="sports">⚽ Deportes</option>
-                    <option value="other">📦 Otro</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-300">Duración (min)</label>
-                  <input type="number" min="1" value={newWorkoutDuration} onChange={(e) => setNewWorkoutDuration(e.target.value === '' ? '' : Number(e.target.value))} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono" required />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300">Contexto</label>
-                <select value={newWorkoutLocation} onChange={(e) => setNewWorkoutLocation(e.target.value as any)} className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white">
-                  <option value="rest_home">🌿 Casa / Descanso</option>
-                  <option value="mine_camp">⛏️ Campamento Minero</option>
-                  <option value="transit">🚌 En Tránsito</option>
-                </select>
-              </div>
-
-              <div className="border-t border-slate-800 pt-3">
-                <label className="text-xs font-bold text-slate-300">Rutina Calisténica Predefinida</label>
-                <select
-                  value={selectedRoutine}
-                  onChange={(e) => { const val = e.target.value as RoutineKey | 'custom'; if (val === 'custom') clearRoutine(); else applyRoutine(val); }}
-                  className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white"
-                >
-                  <option value="custom">✏️ Personalizada (vacío)</option>
-                  <optgroup label="🏋️ Fuerza / Hipertrofia">
-                    <option value="full-body-basico">Full Body Básico (30 min, Principiante)</option>
-                    <option value="push-pull-legs">Push / Pull / Legs (45 min, Intermedio)</option>
-                    <option value="upper-body-fuerza">Upper Body Fuerza (50 min, Avanzado)</option>
-                    <option value="faena-express">Faena Express (15 min, Sin equipamiento)</option>
-                  </optgroup>
-                  <optgroup label="🔥 HIIT / Quema Grasa">
-                    <option value="hiit-calistenia">HIIT Calisténico (20 min)</option>
-                  </optgroup>
-                  <optgroup label="🤸 Movilidad / Core">
-                    <option value="core-calistenia">Core & Movilidad (20 min)</option>
-                  </optgroup>
-                  <optgroup label="🎯 Skill Work (Avanzado)">
-                    <option value="skill-work">Planche / Front Lever / Handstand (60 min)</option>
-                  </optgroup>
-                </select>
-                {selectedRoutine !== 'custom' && (
-                  <p className="mt-1 text-[10px] text-emerald-400">
-                    Cargada: {CALISTHENICS_ROUTINES[selectedRoutine].name} — {CALISTHENICS_ROUTINES[selectedRoutine].exercises.length} ejercicios, ~{CALISTHENICS_ROUTINES[selectedRoutine].duration} min
-                  </p>
-                )}
-              </div>
-
-              <div className="border-t border-slate-800 pt-3">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-300">Ejercicios</label>
-                  <button type="button" onClick={addExerciseRow} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"><Plus className="w-3 h-3" /> Agregar ejercicio</button>
-                </div>
-                <div className="space-y-2">
-                  {newWorkoutExercises.map((ex, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-5">
-                        <input type="text" value={ex.name} onChange={(e) => updateExercise(idx, 'name', e.target.value)} placeholder="Ej. Press banca, Sentadilla" className="w-full p-2 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" required />
-                      </div>
-                      <div className="col-span-2">
-                        <input type="number" min="1" value={ex.sets} onChange={(e) => updateExercise(idx, 'sets', Number(e.target.value))} placeholder="Series" className="w-full p-2 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono text-center" required />
-                      </div>
-                      <div className="col-span-3">
-                        <input type="text" value={ex.reps} onChange={(e) => updateExercise(idx, 'reps', e.target.value)} placeholder="Reps (ej. 10-12)" className="w-full p-2 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" required />
-                      </div>
-                      <div className="col-span-2">
-                        <input type="number" step="0.5" min="0" value={ex.weightKg || ''} onChange={(e) => updateExercise(idx, 'weightKg', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="Peso kg" className="w-full p-2 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono text-center" />
-                      </div>
-                      {newWorkoutExercises.length > 1 && (
-                        <button type="button" onClick={() => removeExerciseRow(idx)} className="col-span-auto p-2 rounded-xl bg-slate-800 hover:bg-red-950/80 text-slate-500 hover:text-rose-400 transition-colors" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-300">Calorías (opcional)</label>
-                  <input type="number" min="0" value={newWorkoutCalories} onChange={(e) => setNewWorkoutCalories(e.target.value === '' ? '' : Number(e.target.value))} placeholder="ej. 350" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white font-mono" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-300">Peso corporal (opcional)</label>
-                  <input type="number" step="0.1" min="0" value={newWeight} onChange={(e) => setNewWeight(e.target.value === '' ? '' : Number(e.target.value))} placeholder="ej. 75.5" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300">Notas</label>
-                <input type="text" value={newWorkoutNotes} onChange={(e) => setNewWorkoutNotes(e.target.value)} placeholder="Ej. Buena sesión, progresión de peso" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-                <button type="button" onClick={() => setIsAddingWorkoutModalOpen(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white">Cancelar</button>
-                <button type="submit" className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg">Guardar Entrenamiento</button>
-              </div>
-            </form>
-          </div>
+      {isWorkoutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-sm">
+          <form onSubmit={saveWorkout} className="my-8 w-full max-w-2xl space-y-4 rounded-3xl border border-slate-700 bg-slate-900 p-5 text-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3"><div><h2 className="text-base font-black">Registrar entrenamiento</h2><p className="mt-1 text-[10px] text-slate-400">Duración real obligatoria; el resto es opcional.</p></div><button type="button" onClick={() => setIsWorkoutOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-4 w-4" /></button></div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <label className="text-xs font-bold text-slate-300">Tipo<select value={workoutDraft.type} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, type: e.target.value as WorkoutType }))} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white"><option value="strength">Fuerza</option><option value="cardio">Cardio</option><option value="hiit">HIIT</option><option value="yoga">Yoga</option><option value="mobility">Movilidad</option><option value="sports">Deportes</option><option value="other">Otro</option></select></label>
+              <label className="text-xs font-bold text-slate-300">Duración (min)<input type="number" min="1" value={workoutDraft.duration} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, duration: e.target.value }))} placeholder="Obligatorio" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Contexto<select value={workoutDraft.location} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, location: e.target.value as LocationContext }))} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white"><option value="mine_camp">Faena</option><option value="rest_home">Casa / descanso</option><option value="transit">Tránsito</option></select></label>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-xs font-bold text-slate-300">Ejercicio principal<input value={workoutDraft.exerciseName} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, exerciseName: e.target.value }))} placeholder="Opcional" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Calorías<input type="number" value={workoutDraft.calories} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, calories: e.target.value }))} placeholder="Opcional" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <label className="text-xs font-bold text-slate-300">Series<input type="number" min="1" value={workoutDraft.sets} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, sets: e.target.value }))} placeholder="Opcional" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Reps<input value={workoutDraft.reps} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, reps: e.target.value }))} placeholder="Opcional" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+              <label className="text-xs font-bold text-slate-300">Peso (kg)<input type="number" step="0.5" value={workoutDraft.weightKg} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, weightKg: e.target.value }))} placeholder="Opcional" className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            </div>
+            <label className="block text-xs font-bold text-slate-300">Notas<textarea value={workoutDraft.notes} onChange={(e) => setWorkoutDraft((draft) => ({ ...draft, notes: e.target.value }))} placeholder="Opcional" rows={2} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white" /></label>
+            {workoutError && <p className="rounded-xl border border-rose-900 bg-rose-950/40 p-3 text-xs font-bold text-rose-300">{workoutError}</p>}
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3"><button type="button" onClick={() => setIsWorkoutOpen(false)} className="min-h-11 rounded-xl px-4 text-xs font-bold text-slate-300">Cancelar</button><button type="submit" className="min-h-11 rounded-xl bg-amber-400 px-5 text-xs font-black text-slate-950">Guardar entrenamiento</button></div>
+          </form>
         </div>
       )}
 
       <GoogleFitSyncModal isOpen={isFitModalOpen} onClose={() => setIsFitModalOpen(false)} />
+
+      {latestOverall && (
+        <p className="text-center text-[10px] text-slate-400">Último registro guardado: {latestOverall.date}{latestOverall.time ? ` · ${latestOverall.time}` : ''}</p>
+      )}
     </div>
   );
 };

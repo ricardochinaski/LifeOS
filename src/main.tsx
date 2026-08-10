@@ -2,6 +2,7 @@ import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { sanitizePersistedState } from './lib/storageRecovery';
 import './index.css';
+import './daily-use-mobile.css';
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Error desconocido al iniciar LifeOS.';

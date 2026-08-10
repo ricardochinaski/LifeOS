@@ -1,0 +1,22 @@
+@media (hover: none), (pointer: coarse) {
+  .lifeos-content .group .opacity-0 {
+    opacity: 1 !important;
+  }
+
+  .lifeos-content .group .opacity-0 > button {
+    display: inline-flex !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-color: rgb(71 85 105) !important;
+    background-color: rgb(15 23 42) !important;
+    color: rgb(203 213 225) !important;
+  }
+
+  .lifeos-content .group .opacity-0 > button:last-child {
+    border-color: rgb(159 18 57 / 0.7) !important;
+    background-color: rgb(76 5 25 / 0.55) !important;
+    color: rgb(251 113 133) !important;
+  }
+}
