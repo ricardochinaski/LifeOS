@@ -52,7 +52,7 @@ const AppContent: React.FC = () => {
   }, [appSettings.primaryColor, appSettings.uiDensity, appSettings.fontFamily]);
 
   return (
-    <div className="lifeos-shell min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors selection:bg-emerald-500 selection:text-white pb-[calc(5rem+env(safe-area-inset-bottom,0px))] relative">
+    <div className="lifeos-shell min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors selection:bg-emerald-500 selection:text-white pb-[calc(5rem+env(safe-area-inset-bottom,0px))] relative overflow-x-hidden">
       <DailyAutomationBridge />
       <Navbar />
       <MainContent />
@@ -66,10 +66,11 @@ const AppContent: React.FC = () => {
 
       <button
         onClick={openAICopilot}
-        className="fixed bottom-20 right-4 sm:bottom-24 sm:right-6 z-30 p-3 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+        className="fixed bottom-24 right-6 z-30 hidden h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 sm:flex"
         title="LifeOS Copilot IA"
+        aria-label="Abrir LifeOS Copilot IA"
       >
-        <Bot className="w-5 h-5" />
+        <Bot className="h-5 w-5" />
       </button>
 
       <BottomNav />
