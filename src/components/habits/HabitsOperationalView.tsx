@@ -6,9 +6,12 @@ import { buildDailyPlan } from '../../lib/dailyPlan';
 import { OperationalModeHeader, FullModeBackButton } from '../common/OperationalModeHeader';
 import { HabitsView } from './HabitsView';
 
+const DAILY_HABIT_LIMIT = 6;
+
 export const HabitsOperationalView: React.FC = () => {
   const { habits, habitLogs, logHabit, shiftInfo } = useLifeOS();
   const [fullMode, setFullMode] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const today = todayLocalDate();
 
   const plan = useMemo(() => buildDailyPlan({
@@ -18,6 +21,15 @@ export const HabitsOperationalView: React.FC = () => {
     today,
     phase: shiftInfo.phase,
   }), [habits, habitLogs, shiftInfo.phase, today]);
+
+  const orderedHabits = useMemo(() => [...plan.dueHabits].sort((a, b) => {
+    const aDone = plan.completedHabitIds.has(a.id) ? 1 : 0;
+    const bDone = plan.completedHabitIds.has(b.id) ? 1 : 0;
+    return aDone - bDone;
+  }), [plan.dueHabits, plan.completedHabitIds]);
+
+  const displayedHabits = showAll ? orderedHabits : orderedHabits.slice(0, DAILY_HABIT_LIMIT);
+  const remainingCount = Math.max(0, orderedHabits.length - displayedHabits.length);
 
   if (fullMode) {
     return (
@@ -36,6 +48,7 @@ export const HabitsOperationalView: React.FC = () => {
   };
 
   const completionPct = plan.dueHabits.length ? Math.round((plan.habitsCompleted / plan.dueHabits.length) * 100) : 0;
+  const pendingCount = Math.max(0, plan.dueHabits.length - plan.habitsCompleted);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] animate-fade-in">
@@ -61,6 +74,7 @@ export const HabitsOperationalView: React.FC = () => {
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Progreso diario</p>
             <p className="mt-1 text-3xl font-black text-slate-950 dark:text-white">{plan.habitsCompleted}/{plan.dueHabits.length}</p>
+            <p className="mt-1 text-[11px] font-bold text-slate-400">{pendingCount ? `${pendingCount} pendientes` : 'Rutina completada'}</p>
           </div>
           <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{completionPct}%</p>
         </div>
@@ -78,7 +92,7 @@ export const HabitsOperationalView: React.FC = () => {
           </div>
         )}
 
-        {plan.dueHabits.map((habit) => {
+        {displayedHabits.map((habit) => {
           const completed = plan.completedHabitIds.has(habit.id);
           return (
             <article key={habit.id} className={`rounded-3xl border p-4 shadow-sm ${completed ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}`}>
@@ -102,6 +116,26 @@ export const HabitsOperationalView: React.FC = () => {
             </article>
           );
         })}
+
+        {remainingCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+          >
+            Ver {remainingCount} hábitos restantes
+          </button>
+        )}
+
+        {showAll && orderedHabits.length > DAILY_HABIT_LIMIT && (
+          <button
+            type="button"
+            onClick={() => setShowAll(false)}
+            className="w-full px-4 py-2 text-xs font-bold text-slate-400"
+          >
+            Mostrar solo los prioritarios
+          </button>
+        )}
       </section>
     </div>
   );

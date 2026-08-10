@@ -3,6 +3,7 @@ import { useLifeOS } from '../../context/LifeOSContext';
 import type { TabType } from '../../types';
 import {
   BookOpen,
+  Bot,
   CheckSquare,
   Flame,
   HeartPulse,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
-  const { activeTab, setActiveTab, openQuickCapture } = useLifeOS();
+  const { activeTab, setActiveTab, openQuickCapture, openAICopilot } = useLifeOS();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const navigate = (tab: TabType) => {
@@ -60,27 +61,51 @@ export const BottomNav: React.FC = () => {
   return (
     <>
       {moreOpen && (
-        <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] right-3 z-50 w-64 rounded-3xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-          <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Más de LifeOS</p>
-          {secondaryItems.map((item) => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => navigate(item.id)}
-                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${active ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-              >
-                <div className="rounded-xl bg-slate-100 p-2 dark:bg-slate-800"><Icon className="h-4 w-4" /></div>
-                <div>
-                  <p className="text-xs font-black">{item.label}</p>
-                  <p className="text-[10px] text-slate-500">{item.description}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            onClick={() => setMoreOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[1px]"
+          />
+          <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] right-3 z-50 w-64 rounded-3xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Más de LifeOS</p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false);
+                openAICopilot();
+              }}
+              className="mb-1 flex w-full items-center gap-3 rounded-2xl bg-emerald-50 px-3 py-3 text-left text-emerald-800 transition hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/70"
+            >
+              <div className="rounded-xl bg-emerald-100 p-2 dark:bg-emerald-950"><Bot className="h-4 w-4" /></div>
+              <div>
+                <p className="text-xs font-black">Copilot IA</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">Consultar y organizar LifeOS</p>
+              </div>
+            </button>
+
+            {secondaryItems.map((item) => {
+              const Icon = item.icon;
+              const active = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => navigate(item.id)}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${active ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                >
+                  <div className="rounded-xl bg-slate-100 p-2 dark:bg-slate-800"><Icon className="h-4 w-4" /></div>
+                  <div>
+                    <p className="text-xs font-black">{item.label}</p>
+                    <p className="text-[10px] text-slate-500">{item.description}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <nav

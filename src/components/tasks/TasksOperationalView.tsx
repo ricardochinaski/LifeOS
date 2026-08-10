@@ -6,25 +6,32 @@ import { rankDailyTasks } from '../../lib/dailyPlan';
 import { OperationalModeHeader, FullModeBackButton } from '../common/OperationalModeHeader';
 import { TasksView } from './TasksView';
 
-type TaskFilter = 'today' | 'focus' | 'overdue' | 'all';
+type TaskFilter = 'due' | 'focus' | 'overdue' | 'all';
+
+const MOBILE_TASK_LIMIT = 8;
 
 export const TasksOperationalView: React.FC = () => {
   const { tasks, projects, shiftInfo, toggleTaskStatus, openQuickCapture } = useLifeOS();
   const [fullMode, setFullMode] = useState(false);
-  const [filter, setFilter] = useState<TaskFilter>('today');
+  const [filter, setFilter] = useState<TaskFilter>('due');
+  const [showAll, setShowAll] = useState(false);
   const today = todayLocalDate();
 
   const ranked = useMemo(() => rankDailyTasks(tasks, today, shiftInfo.phase), [tasks, today, shiftInfo.phase]);
   const overdueCount = ranked.filter((task) => task.dueDate && task.dueDate < today).length;
   const todayCount = ranked.filter((task) => task.dueDate === today).length;
   const focusCount = ranked.filter((task) => task.priority === 'p1' || task.priority === 'p2').length;
+  const dueCount = overdueCount + todayCount;
 
   const visibleTasks = useMemo(() => {
-    if (filter === 'today') return ranked.filter((task) => task.dueDate === today || (task.dueDate && task.dueDate < today));
+    if (filter === 'due') return ranked.filter((task) => task.dueDate === today || (task.dueDate && task.dueDate < today));
     if (filter === 'focus') return ranked.filter((task) => task.priority === 'p1' || task.priority === 'p2');
     if (filter === 'overdue') return ranked.filter((task) => task.dueDate && task.dueDate < today);
     return ranked;
   }, [filter, ranked, today]);
+
+  const displayedTasks = showAll ? visibleTasks : visibleTasks.slice(0, MOBILE_TASK_LIMIT);
+  const remainingCount = Math.max(0, visibleTasks.length - displayedTasks.length);
 
   if (fullMode) {
     return (
@@ -38,8 +45,11 @@ export const TasksOperationalView: React.FC = () => {
   const filterButton = (id: TaskFilter, label: string, count?: number) => (
     <button
       type="button"
-      onClick={() => setFilter(id)}
-      className={`min-h-10 rounded-2xl border px-3 py-2 text-xs font-black transition-all ${
+      onClick={() => {
+        setFilter(id);
+        setShowAll(false);
+      }}
+      className={`min-h-10 shrink-0 rounded-2xl border px-3 py-2 text-xs font-black transition-all ${
         filter === id
           ? 'border-emerald-500 bg-emerald-500 text-slate-950'
           : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
@@ -83,8 +93,8 @@ export const TasksOperationalView: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {filterButton('today', 'Hoy', todayCount + overdueCount)}
+      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        {filterButton('due', 'Pendientes', dueCount)}
         {filterButton('focus', 'Enfoque', focusCount)}
         {filterButton('overdue', 'Atrasadas', overdueCount)}
         {filterButton('all', 'Todas', ranked.length)}
@@ -99,7 +109,7 @@ export const TasksOperationalView: React.FC = () => {
           </div>
         )}
 
-        {visibleTasks.slice(0, 20).map((task) => {
+        {displayedTasks.map((task) => {
           const project = task.projectId ? projects.find((item) => item.id === task.projectId) : undefined;
           const overdue = Boolean(task.dueDate && task.dueDate < today);
           return (
@@ -108,7 +118,7 @@ export const TasksOperationalView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => toggleTaskStatus(task.id)}
-                  className="mt-0.5 shrink-0 rounded-xl border border-slate-200 p-2 text-slate-400 hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-700"
+                  className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-400 transition-colors hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-700"
                   aria-label={`Completar ${task.title}`}
                 >
                   <CheckCircle2 className="h-5 w-5" />
@@ -129,6 +139,16 @@ export const TasksOperationalView: React.FC = () => {
             </article>
           );
         })}
+
+        {remainingCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+          >
+            Ver {remainingCount} tareas más
+          </button>
+        )}
       </section>
     </div>
   );
