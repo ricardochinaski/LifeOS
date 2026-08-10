@@ -2,9 +2,21 @@ import { todayLocalDate } from '../../lib/dateOnly';
 import React, { useState } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { syncFromHealthConnect, HealthConnectData } from '../../lib/healthConnect';
+import { hasAnyHealthMetric } from '../../lib/healthMetrics';
 import { isNative } from '../../lib/native';
+import type { HealthLog } from '../../types';
 import {
-  Watch, Smartphone, CheckCircle2, RefreshCw, Upload, Activity, Heart, Moon, Zap, Info, X, Sparkles, ShieldCheck, FileSpreadsheet
+  Watch,
+  Smartphone,
+  CheckCircle2,
+  RefreshCw,
+  Activity,
+  Heart,
+  Moon,
+  Footprints,
+  Info,
+  X,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface XiaomiFitnessSyncModalProps {
@@ -12,38 +24,80 @@ interface XiaomiFitnessSyncModalProps {
   onClose: () => void;
 }
 
+type SyncMethod = 'live' | 'manual';
+
+const emptyHealthData = (): HealthConnectData => ({
+  spO2Pct: null,
+  heartRateBpm: null,
+  sleepHours: null,
+  stepsCount: null,
+  calories: null,
+  bloodPressureSys: null,
+  bloodPressureDia: null,
+});
+
+const parseOptionalNumber = (value: string): number | null => {
+  if (!value.trim()) return null;
+  const parsed = Number(value.replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export const XiaomiFitnessSyncModal: React.FC<XiaomiFitnessSyncModalProps> = ({ isOpen, onClose }) => {
-  const { addHealthLog, showToast } = useLifeOS();
-  const [syncMethod, setSyncMethod] = useState<'live' | 'export_file' | 'manual_preset'>('live');
+  const { addHealthLog, showToast, shiftInfo } = useLifeOS();
+  const [syncMethod, setSyncMethod] = useState<SyncMethod>('live');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
+  const [liveData, setLiveData] = useState<HealthConnectData | null>(null);
 
-  const [spo2, setSpo2] = useState<number>(97);
-  const [heartRate, setHeartRate] = useState<number>(66);
-  const [sleepHours, setSleepHours] = useState<number>(7.8);
-  const [stepsCount, setStepsCount] = useState<number>(8420);
+  const [manualSpO2, setManualSpO2] = useState('');
+  const [manualHeartRate, setManualHeartRate] = useState('');
+  const [manualSleep, setManualSleep] = useState('');
+  const [manualSteps, setManualSteps] = useState('');
 
   if (!isOpen) return null;
 
-  const saveHealthLog = (data: { spo2: number; hr: number; sleep: number; steps: number; sys?: number; dia?: number }) => {
-    addHealthLog({
+  const locationContext: HealthLog['locationContext'] = shiftInfo.phase === 'work' ? 'mine_camp' : 'rest_home';
+
+  const hasData = (data: HealthConnectData) =>
+    hasAnyHealthMetric([
+      data.spO2Pct,
+      data.heartRateBpm,
+      data.sleepHours,
+      data.stepsCount,
+      data.calories,
+      data.bloodPressureSys,
+      data.bloodPressureDia,
+    ]);
+
+  const saveHealthLog = (data: HealthConnectData, source: 'Health Connect' | 'Manual') => {
+    if (!hasData(data)) return false;
+
+    const log: Omit<HealthLog, 'id'> = {
       date: todayLocalDate(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      spO2Pct: data.spo2,
-      heartRateBpm: data.hr,
-      sleepHours: data.sleep,
-      sleepQuality: data.sleep >= 7.5 ? 'excelente' : data.sleep >= 6 ? 'buena' : 'regular',
-      energyLevel: Math.min(10, Math.round(data.sleep + 1)),
-      bloodPressureSys: data.sys || 118,
-      bloodPressureDia: data.dia || 78,
-      locationContext: 'mine_camp',
-      notes: `Sincronizado desde Xiaomi Mi Fitness via Health Connect. Pasos: ${data.steps.toLocaleString()}`
-    });
+      locationContext,
+      notes: source === 'Health Connect'
+        ? 'Sincronizado desde Health Connect. Solo se guardaron métricas realmente entregadas por el dispositivo.'
+        : 'Registro manual de salud.',
+    };
+
+    if (data.spO2Pct !== null) log.spO2Pct = data.spO2Pct;
+    if (data.heartRateBpm !== null) log.heartRateBpm = data.heartRateBpm;
+    if (data.sleepHours !== null) log.sleepHours = data.sleepHours;
+    if (data.stepsCount !== null) log.steps = data.stepsCount;
+    if (data.calories !== null) log.calories = data.calories;
+    if (data.bloodPressureSys !== null && data.bloodPressureDia !== null) {
+      log.bloodPressureSys = data.bloodPressureSys;
+      log.bloodPressureDia = data.bloodPressureDia;
+    }
+
+    addHealthLog(log);
+    return true;
   };
 
   const handleSyncFromHealthConnect = async () => {
     if (!isNative()) {
-      showToast('Health Connect solo está disponible en Android. Usa el modo manual.');
+      showToast('Health Connect solo está disponible en Android.');
       return;
     }
 
@@ -51,19 +105,20 @@ export const XiaomiFitnessSyncModal: React.FC<XiaomiFitnessSyncModalProps> = ({ 
     setSyncSuccess(false);
 
     try {
-      const healthData: HealthConnectData | null = await syncFromHealthConnect();
-      if (healthData) {
-        saveHealthLog({
-          spo2: healthData.spO2Pct ?? spo2,
-          hr: healthData.heartRateBpm ?? heartRate,
-          sleep: healthData.sleepHours ?? sleepHours,
-          steps: healthData.stepsCount ?? stepsCount,
-          sys: healthData.bloodPressureSys ?? undefined,
-          dia: healthData.bloodPressureDia ?? undefined,
-        });
-        setSyncSuccess(true);
-        showToast('Datos sincronizados desde Health Connect (Xiaomi Mi Fitness)');
+      const healthData = await syncFromHealthConnect();
+      if (!healthData) {
+        showToast('Health Connect no devolvió datos.');
+        return;
       }
+
+      setLiveData(healthData);
+      if (!saveHealthLog(healthData, 'Health Connect')) {
+        showToast('No hay métricas disponibles hoy. Revisa los permisos y las fuentes de Health Connect.');
+        return;
+      }
+
+      setSyncSuccess(true);
+      showToast('Datos reales guardados desde Health Connect');
     } catch (e: any) {
       showToast(e.message || 'Error al conectar con Health Connect');
     } finally {
@@ -71,16 +126,31 @@ export const XiaomiFitnessSyncModal: React.FC<XiaomiFitnessSyncModalProps> = ({ 
     }
   };
 
-  const handleSimulateSync = () => {
-    setIsSyncing(true);
-    setSyncSuccess(false);
+  const handleManualSave = () => {
+    const data: HealthConnectData = {
+      ...emptyHealthData(),
+      spO2Pct: parseOptionalNumber(manualSpO2),
+      heartRateBpm: parseOptionalNumber(manualHeartRate),
+      sleepHours: parseOptionalNumber(manualSleep),
+      stepsCount: parseOptionalNumber(manualSteps),
+    };
 
-    setTimeout(() => {
-      saveHealthLog({ spo2, hr: heartRate, sleep: sleepHours, steps: stepsCount });
-      setIsSyncing(false);
-      setSyncSuccess(true);
-    }, 800);
+    if (!saveHealthLog(data, 'Manual')) {
+      showToast('Ingresa al menos una métrica antes de guardar.');
+      return;
+    }
+
+    setSyncSuccess(true);
+    showToast('Registro manual guardado');
   };
+
+  const display = (value: number | null | undefined, suffix = '', digits?: number) => {
+    if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+    const shown = typeof digits === 'number' ? value.toFixed(digits) : Math.round(value).toLocaleString('es-CL');
+    return `${shown}${suffix}`;
+  };
+
+  const current = liveData ?? emptyHealthData();
 
   return (
     <div
@@ -90,125 +160,104 @@ export const XiaomiFitnessSyncModal: React.FC<XiaomiFitnessSyncModalProps> = ({ 
       <div className="w-full max-w-xl p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-5 animate-scale-in text-white">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-orange-500/20 text-orange-400 border border-orange-500/30">
-              <Watch className="w-6 h-6" />
+            <div className="p-3 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <Activity className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-orange-400">Xiaomi Mi Fitness</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">Health Connect</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Health Connect
+                  Android
                 </span>
               </div>
-              <h2 className="text-lg font-black text-white">Sincronización de Biometría Xiaomi</h2>
+              <h2 className="text-lg font-black text-white">Sincronización de salud</h2>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 p-1 bg-slate-800/80 rounded-2xl border border-slate-700/80">
-          {(['live', 'export_file', 'manual_preset'] as const).map((method) => (
-            <button key={method} onClick={() => { setSyncMethod(method); setSyncSuccess(false); }}
-              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                syncMethod === method ? 'bg-orange-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {method === 'live' && <><Zap className="w-3.5 h-3.5" /><span>Health Connect</span></>}
-              {method === 'export_file' && <><Upload className="w-3.5 h-3.5" /><span>Importar CSV</span></>}
-              {method === 'manual_preset' && <><Smartphone className="w-3.5 h-3.5" /><span>Manual</span></>}
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-800/80 rounded-2xl border border-slate-700/80">
+          <button
+            onClick={() => { setSyncMethod('live'); setSyncSuccess(false); }}
+            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${syncMethod === 'live' ? 'bg-emerald-500 text-slate-950 shadow-md font-black' : 'text-slate-300 hover:text-white'}`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" /> Health Connect
+          </button>
+          <button
+            onClick={() => { setSyncMethod('manual'); setSyncSuccess(false); }}
+            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${syncMethod === 'manual' ? 'bg-emerald-500 text-slate-950 shadow-md font-black' : 'text-slate-300 hover:text-white'}`}
+          >
+            <Smartphone className="w-3.5 h-3.5" /> Manual
+          </button>
         </div>
 
         {syncMethod === 'live' && (
           <div className="space-y-4">
-            <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-xs text-orange-200">
-              <p className="font-bold flex items-center gap-1.5 text-orange-400">
-                <ShieldCheck className="w-4 h-4" /> Health Connect (Android)
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs">
+              <p className="font-bold flex items-center gap-1.5 text-emerald-400">
+                <ShieldCheck className="w-4 h-4" /> Fuente: Health Connect
               </p>
               <p className="text-[11px] text-slate-300 leading-relaxed mt-1">
-                Lee datos directamente desde Health Connect. Xiaomi Mi Fitness sincroniza automáticamente SpO2, pulso, sueño y pasos a Health Connect. Asegúrate de tener la app Mi Fitness vinculada.
+                LifeOS leerá únicamente los datos que Health Connect tenga disponibles y para los que hayas concedido permiso. Google Fit, Mi Fitness, Samsung Health u otras apps pueden actuar como fuentes si escriben allí.
               </p>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+            <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'SpO2', value: spo2, unit: '%', color: 'text-emerald-400', icon: Activity },
-                { label: 'Pulso', value: heartRate, unit: 'BPM', color: 'text-rose-400', icon: Heart },
-                { label: 'Sueño', value: sleepHours, unit: 'hrs', color: 'text-indigo-400', icon: Moon },
-                { label: 'Pasos', value: stepsCount.toLocaleString(), unit: '', color: 'text-amber-400', icon: Zap },
+                { label: 'Pasos hoy', value: display(current.stepsCount), color: 'text-emerald-400', icon: Footprints },
+                { label: 'Pulso', value: display(current.heartRateBpm, ' bpm'), color: 'text-rose-400', icon: Heart },
+                { label: 'SpO₂', value: display(current.spO2Pct, '%'), color: 'text-cyan-400', icon: Activity },
+                { label: 'Sueño', value: display(current.sleepHours, ' h', 2), color: 'text-indigo-400', icon: Moon },
               ].map((item) => (
                 <div key={item.label} className="p-3 rounded-2xl bg-slate-800/80 border border-slate-700 text-center space-y-1">
                   <item.icon className={`w-4 h-4 ${item.color} mx-auto`} />
                   <p className="text-[10px] text-slate-400 font-bold uppercase">{item.label}</p>
-                  <p className={`text-base font-black ${item.color}`}>{item.value}{item.unit}</p>
+                  <p className={`text-base font-black ${item.color}`}>{item.value}</p>
                 </div>
               ))}
             </div>
-            <button onClick={handleSyncFromHealthConnect} disabled={isSyncing}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 cursor-pointer disabled:opacity-50"
+
+            <p className="text-[10px] text-slate-500">
+              Antes de sincronizar se muestra “—”. LifeOS ya no completa métricas ausentes con valores simulados.
+            </p>
+
+            <button
+              onClick={handleSyncFromHealthConnect}
+              disabled={isSyncing}
+              className="w-full py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
             >
-              {isSyncing ? <><RefreshCw className="w-4 h-4 animate-spin text-slate-950" /><span>Leyendo Health Connect...</span></>
-                : <><Watch className="w-4 h-4 text-slate-950" /><span>Sincronizar desde Health Connect</span></>}
+              {isSyncing
+                ? <><RefreshCw className="w-4 h-4 animate-spin" /><span>Leyendo Health Connect...</span></>
+                : <><Watch className="w-4 h-4" /><span>Sincronizar datos reales</span></>}
             </button>
           </div>
         )}
 
-        {syncMethod === 'export_file' && (
-          <div className="space-y-4">
-            <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700 text-xs space-y-2">
-              <p className="font-bold text-white flex items-center gap-1.5">
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                Exportar datos desde Mi Fitness:
-              </p>
-              <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-300">
-                <li>Abre <strong>Mi Fitness</strong> en tu teléfono.</li>
-                <li>Ve a <strong>Perfil &gt; Configuración &gt; Exportar datos</strong>.</li>
-                <li>Selecciona el rango y exporta CSV o JSON.</li>
-              </ol>
-            </div>
-            <label className="border-2 border-dashed border-slate-700 hover:border-orange-500 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-slate-800/40">
-              <Upload className="w-8 h-8 text-orange-400" />
-              <span className="text-xs font-bold text-white">Seleccionar archivo CSV/JSON</span>
-              <span className="text-[10px] text-slate-400">Mi Smart Band 6-9 y Xiaomi Watch</span>
-              <input type="file" accept=".csv,.json" onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setIsSyncing(true);
-                setTimeout(() => {
-                  saveHealthLog({ spo2: 96, hr: 64, sleep: 8.0, steps: 10000 });
-                  setIsSyncing(false);
-                  setSyncSuccess(true);
-                }, 1000);
-              }} className="hidden" />
-            </label>
-          </div>
-        )}
-
-        {syncMethod === 'manual_preset' && (
+        {syncMethod === 'manual' && (
           <div className="space-y-3">
-            <p className="text-xs text-slate-300">Ajusta los valores actuales:</p>
+            <p className="text-xs text-slate-300">Ingresa solo valores medidos. Los campos pueden quedar vacíos.</p>
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'SpO2 (%)', val: spo2, set: setSpo2 },
-                { label: 'Pulso (BPM)', val: heartRate, set: setHeartRate },
-                { label: 'Sueño (hrs)', val: sleepHours, set: setSleepHours, step: 0.1 },
-                { label: 'Pasos', val: stepsCount, set: setStepsCount },
-              ].map((item) => (
-                <div key={item.label}>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">{item.label}</label>
-                  <input type="number" step={item.step || 1} value={item.val}
-                    onChange={(e) => (item.set as any)(Number(e.target.value))}
-                    className="w-full mt-1 p-2 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white"
-                  />
-                </div>
-              ))}
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">SpO₂ (%)</label>
+                <input type="number" value={manualSpO2} onChange={(e) => setManualSpO2(e.target.value)} placeholder="—" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Pulso (bpm)</label>
+                <input type="number" value={manualHeartRate} onChange={(e) => setManualHeartRate(e.target.value)} placeholder="—" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Sueño (horas)</label>
+                <input type="number" step="0.1" value={manualSleep} onChange={(e) => setManualSleep(e.target.value)} placeholder="—" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Pasos</label>
+                <input type="number" value={manualSteps} onChange={(e) => setManualSteps(e.target.value)} placeholder="—" className="w-full mt-1 p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-xs text-white" />
+              </div>
             </div>
-            <button onClick={handleSimulateSync} disabled={isSyncing}
-              className="w-full mt-2 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs uppercase cursor-pointer disabled:opacity-50"
-            >
-              Guardar Lectura Manual
+            <button onClick={handleManualSave} className="w-full mt-2 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase">
+              Guardar lectura manual
             </button>
           </div>
         )}
@@ -216,13 +265,13 @@ export const XiaomiFitnessSyncModal: React.FC<XiaomiFitnessSyncModalProps> = ({ 
         {syncSuccess && (
           <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-            <span>¡Datos guardados en tu Ficha de Salud!</span>
+            <span>Datos guardados en tu ficha de salud.</span>
           </div>
         )}
 
         <div className="border-t border-slate-800 pt-3 flex items-center justify-between text-[11px] text-slate-400">
-          <span className="flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Health Connect + Xiaomi Smart Band</span>
-          <button onClick={onClose} className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold">Cerrar</button>
+          <span className="flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Sin valores simulados</span>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold">Cerrar</button>
         </div>
       </div>
     </div>
