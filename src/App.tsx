@@ -8,6 +8,7 @@ import { AICopilotModal } from './components/common/AICopilotModal';
 import { VoiceCommandModal } from './components/common/VoiceCommandModal';
 import { CommandPalette } from './components/common/CommandPalette';
 import { DailyAutomationBridge } from './components/common/DailyAutomationBridge';
+import { PersonalDailySetupCard } from './components/common/PersonalDailySetupCard';
 import { GoogleCalendarSyncModal } from './components/integrations/GoogleCalendarSyncModal';
 import { PushNotificationsModal } from './components/integrations/PushNotificationsModal';
 import { Bot } from 'lucide-react';
@@ -25,7 +26,12 @@ const MainContent: React.FC = () => {
 
   return (
     <main className="lifeos-content max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(1.5rem+env(safe-area-inset-top,0px))]">
-      {activeTab === 'dashboard' && <DashboardViewV2 />}
+      {activeTab === 'dashboard' && (
+        <>
+          <PersonalDailySetupCard />
+          <DashboardViewV2 />
+        </>
+      )}
       {activeTab === 'tasks' && <TasksOperationalView />}
       {activeTab === 'habits' && <HabitsOperationalView />}
       {activeTab === 'finances' && <FinancesOperationalView />}
