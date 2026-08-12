@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  Activity,
   AlertTriangle,
   BookOpen,
   CheckCircle2,
@@ -24,7 +23,7 @@ import { TimerCard } from './TimerCard';
 const priorityClass: Record<string, string> = {
   p1: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
   p2: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
-  p3: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
+  p3: 'bg-sky-100 text-sky-600 dark:bg-sky-950/60 dark:text-sky-300',
   p4: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
 };
 
@@ -47,7 +46,6 @@ export const DashboardViewV2: React.FC = () => {
     habits,
     habitLogs,
     logHabit,
-    accounts,
     budgets,
     transactions,
     books,
@@ -64,7 +62,7 @@ export const DashboardViewV2: React.FC = () => {
 
   const today = todayLocalDate();
   const plan = useMemo(
-    () => buildDailyPlan({ tasks, habits, habitLogs, today, phase: shiftInfo.phase, maxTasks: 5 }),
+    () => buildDailyPlan({ tasks, habits, habitLogs, today, phase: shiftInfo.phase, maxTasks: 3 }),
     [tasks, habits, habitLogs, today, shiftInfo.phase],
   );
 
@@ -94,7 +92,22 @@ export const DashboardViewV2: React.FC = () => {
   const syncHasError = Object.values(syncState).some((state) => state === 'error');
   const syncIsBusy = Object.values(syncState).some((state) => state === 'syncing');
   const openTasks = tasks.filter((task) => task.status !== 'completed').length;
-  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
+  const nextTask = plan.focusTasks[0];
+  const remainingHabits = Math.max(0, plan.dueHabits.length - plan.habitsCompleted);
+
+  const contextTitle = plan.overdueCount > 0
+    ? 'Hoy requiere atención'
+    : nextTask
+      ? 'Día enfocado'
+      : 'Día bajo control';
+
+  const contextSummary = plan.overdueCount > 0
+    ? `${plan.overdueCount} tarea${plan.overdueCount === 1 ? '' : 's'} atrasada${plan.overdueCount === 1 ? '' : 's'}.${nextTask ? ` Empieza por “${nextTask.title}”.` : ''}`
+    : nextTask
+      ? `${plan.focusTasks.length} prioridad${plan.focusTasks.length === 1 ? '' : 'es'} visible${plan.focusTasks.length === 1 ? '' : 's'}. Empieza por “${nextTask.title}”.`
+      : remainingHabits > 0
+        ? `Sin tareas críticas ahora. Quedan ${remainingHabits} hábito${remainingHabits === 1 ? '' : 's'} por registrar.`
+        : 'No hay tareas críticas ni hábitos pendientes para este contexto.';
 
   const dueLabel = (dueDate?: string) => {
     if (!dueDate) return 'Sin fecha';
@@ -148,12 +161,34 @@ export const DashboardViewV2: React.FC = () => {
         </div>
       </header>
 
+      <section className={`rounded-3xl border p-4 shadow-sm sm:p-5 ${plan.overdueCount > 0 ? 'border-rose-200 bg-rose-50/80 dark:border-rose-900 dark:bg-rose-950/20' : 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/20'}`}>
+        <div className="flex items-start gap-3">
+          <div className={`mt-0.5 rounded-2xl p-2.5 ${plan.overdueCount > 0 ? 'bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-300' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300'}`}>
+            {plan.overdueCount > 0 ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Contexto de hoy</p>
+            <h2 className="mt-0.5 text-lg font-black text-slate-950 dark:text-white">{contextTitle}</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{contextSummary}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+              <span className="rounded-full bg-white/70 px-2.5 py-1 dark:bg-slate-900/60">{shiftInfo.phase === 'work' ? 'Faena' : 'Descanso'} · día {shiftInfo.dayInPhase}/{shiftInfo.totalPhaseDays}</span>
+              <span className="rounded-full bg-white/70 px-2.5 py-1 dark:bg-slate-900/60">{plan.focusTasks.length}/3 prioridades visibles</span>
+              {remainingHabits > 0 && <span className="rounded-full bg-white/70 px-2.5 py-1 dark:bg-slate-900/60">{remainingHabits} hábitos pendientes</span>}
+            </div>
+          </div>
+          <button onClick={() => setActiveTab('tasks')} className="shrink-0 rounded-xl px-2 py-1 text-xs font-black text-emerald-700 hover:bg-white/70 dark:text-emerald-300 dark:hover:bg-slate-900/50">
+            Ver tareas
+          </button>
+        </div>
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-[1.45fr_0.85fr]">
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-500">Prioridad ejecutable</p>
               <h2 className="text-lg font-black text-slate-950 dark:text-white">Plan del día</h2>
+              <p className="mt-0.5 text-[11px] text-slate-500">Máximo 3 prioridades para mantener foco.</p>
             </div>
             <button onClick={() => setActiveTab('tasks')} className="flex items-center gap-1 text-xs font-black text-emerald-600 dark:text-emerald-400">
               Todas <ChevronRight className="h-4 w-4" />
@@ -218,48 +253,60 @@ export const DashboardViewV2: React.FC = () => {
             </div>
           </div>
 
-          <div className={`rounded-3xl border p-4 shadow-sm ${syncHasError ? 'border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30' : 'border-slate-800 bg-slate-900 text-white'}`}>
-            <div className="flex items-center gap-2">
-              {syncIsBusy ? <RefreshCw className="h-4 w-4 animate-spin text-sky-400" /> : <Cloud className={`h-4 w-4 ${syncHasError ? 'text-rose-500' : 'text-emerald-400'}`} />}
-              <p className={`text-xs font-black ${syncHasError ? 'text-rose-800 dark:text-rose-200' : ''}`}>Datos y sincronización</p>
+          {(syncHasError || !currentUser || syncIsBusy) && (
+            <div className={`rounded-3xl border p-4 shadow-sm ${syncHasError ? 'border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30' : 'border-slate-800 bg-slate-900 text-white'}`}>
+              <div className="flex items-center gap-2">
+                {syncIsBusy ? <RefreshCw className="h-4 w-4 animate-spin text-sky-400" /> : <Cloud className={`h-4 w-4 ${syncHasError ? 'text-rose-500' : 'text-emerald-400'}`} />}
+                <p className={`text-xs font-black ${syncHasError ? 'text-rose-800 dark:text-rose-200' : ''}`}>Datos y sincronización</p>
+              </div>
+              <p className={`mt-2 text-sm font-bold ${syncHasError ? 'text-rose-700 dark:text-rose-300' : 'text-slate-200'}`}>
+                {syncHasError ? 'Hay un módulo con error de sincronización.' : currentUser ? 'Sincronizando cambios.' : 'Datos locales activos. Inicia sesión para respaldo cloud.'}
+              </p>
+              {lastSyncedAt && <p className={`mt-1 text-[10px] ${syncHasError ? 'text-rose-500' : 'text-slate-500'}`}>Último sync: {new Date(lastSyncedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</p>}
             </div>
-            <p className={`mt-2 text-sm font-bold ${syncHasError ? 'text-rose-700 dark:text-rose-300' : 'text-slate-200'}`}>
-              {syncHasError ? 'Hay un módulo con error de sincronización.' : currentUser ? 'Cuenta conectada y respaldo activo.' : 'Datos locales activos. Inicia sesión para respaldo cloud.'}
-            </p>
-            {lastSyncedAt && <p className={`mt-1 text-[10px] ${syncHasError ? 'text-rose-500' : 'text-slate-500'}`}>Último sync: {new Date(lastSyncedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</p>}
-          </div>
+          )}
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <button onClick={() => setActiveTab('finances')} className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-900">
-          <Wallet className="h-5 w-5 text-sky-500" />
-          <p className="mt-2 text-[10px] font-black uppercase text-slate-400">Finanzas</p>
-          <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{formatMoney(monthExpenses, appSettings.currency)}</p>
-          <p className="mt-1 text-[10px] text-slate-500">{budgetPct === null ? 'Sin presupuesto mensual' : `${budgetPct}% del presupuesto`}</p>
-        </button>
+      <details className="group rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 sm:p-5">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Divulgación progresiva</p>
+            <p className="text-sm font-black text-slate-900 dark:text-white">Estado y módulos</p>
+            <p className="mt-1 text-[11px] text-slate-500">Consulta detalles cuando los necesites sin cargar el Inicio.</p>
+          </div>
+          <ChevronRight className="h-5 w-5 text-slate-400 transition group-open:rotate-90" />
+        </summary>
+        <div className="grid grid-cols-2 gap-3 border-t border-slate-200 p-4 dark:border-slate-800 sm:grid-cols-4 sm:p-5">
+          <button onClick={() => setActiveTab('finances')} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-950/40">
+            <Wallet className="h-5 w-5 text-sky-500" />
+            <p className="mt-2 text-[10px] font-black uppercase text-slate-400">Finanzas</p>
+            <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{formatMoney(monthExpenses, appSettings.currency)}</p>
+            <p className="mt-1 text-[10px] text-slate-500">{budgetPct === null ? 'Sin presupuesto mensual' : `${budgetPct}% del presupuesto`}</p>
+          </button>
 
-        <button onClick={() => setActiveTab('health')} className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-900">
-          <HeartPulse className="h-5 w-5 text-rose-500" />
-          <p className="mt-2 text-[10px] font-black uppercase text-slate-400">Salud</p>
-          <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{latestHealthLog?.spO2Pct ? `SpO₂ ${latestHealthLog.spO2Pct}%` : 'Sin biometría hoy'}</p>
-          <p className="mt-1 text-[10px] text-slate-500">{workoutMinutesToday ? `${workoutMinutesToday} min entrenados` : 'Registrar o entrenar'}</p>
-        </button>
+          <button onClick={() => setActiveTab('health')} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-950/40">
+            <HeartPulse className="h-5 w-5 text-rose-500" />
+            <p className="mt-2 text-[10px] font-black uppercase text-slate-400">Salud</p>
+            <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{latestHealthLog?.spO2Pct ? `SpO₂ ${latestHealthLog.spO2Pct}%` : 'Sin biometría hoy'}</p>
+            <p className="mt-1 text-[10px] text-slate-500">{workoutMinutesToday ? `${workoutMinutesToday} min entrenados` : 'Registrar o entrenar'}</p>
+          </button>
 
-        <button onClick={() => setActiveTab('library')} className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-900">
-          <BookOpen className="h-5 w-5 text-violet-500" />
-          <p className="mt-2 text-[10px] font-black uppercase text-slate-400">Lectura</p>
-          <p className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{activeBook?.title || 'Sin libro activo'}</p>
-          <p className="mt-1 text-[10px] text-slate-500">{activeBook ? `Página ${activeBook.currentPage}/${activeBook.totalPages}` : 'Elegir próxima lectura'}</p>
-        </button>
+          <button onClick={() => setActiveTab('library')} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-950/40">
+            <BookOpen className="h-5 w-5 text-violet-500" />
+            <p className="mt-2 text-[10px] font-black uppercase text-slate-400">Lectura</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{activeBook?.title || 'Sin libro activo'}</p>
+            <p className="mt-1 text-[10px] text-slate-500">{activeBook ? `Página ${activeBook.currentPage}/${activeBook.totalPages}` : 'Elegir próxima lectura'}</p>
+          </button>
 
-        <button onClick={() => setActiveTab('tasks')} className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-900">
-          <ListTodo className="h-5 w-5 text-amber-500" />
-          <p className="mt-2 text-[10px] font-black uppercase text-slate-400">Pendientes</p>
-          <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{openTasks} abiertos</p>
-          <p className="mt-1 text-[10px] text-slate-500">{plan.upcomingCount} con fecha futura</p>
-        </button>
-      </section>
+          <button onClick={() => setActiveTab('tasks')} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-950/40">
+            <ListTodo className="h-5 w-5 text-amber-500" />
+            <p className="mt-2 text-[10px] font-black uppercase text-slate-400">Pendientes</p>
+            <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{openTasks} abiertos</p>
+            <p className="mt-1 text-[10px] text-slate-500">{plan.upcomingCount} con fecha futura</p>
+          </button>
+        </div>
+      </details>
 
       <details className="group rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 sm:p-5">
@@ -276,7 +323,7 @@ export const DashboardViewV2: React.FC = () => {
       </details>
 
       <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 sm:flex sm:items-center sm:justify-between">
-        <span className="flex items-center gap-1"><Activity className="h-3.5 w-3.5" /> Balance visible: {formatMoney(totalBalance, appSettings.currency)}</span>
+        {currentUser && !syncHasError && !syncIsBusy && <span className="flex items-center gap-1"><Cloud className="h-3.5 w-3.5 text-emerald-500" /> Respaldo activo</span>}
         {plan.overdueCount > 0 && <span className="flex items-center justify-end gap-1 text-rose-500"><AlertTriangle className="h-3.5 w-3.5" /> {plan.overdueCount} pendiente{plan.overdueCount === 1 ? '' : 's'} atrasado{plan.overdueCount === 1 ? '' : 's'}</span>}
         {workoutMinutesToday > 0 && <span className="hidden items-center gap-1 sm:flex"><Dumbbell className="h-3.5 w-3.5" /> Entrenamiento registrado</span>}
       </div>

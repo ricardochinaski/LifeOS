@@ -75,3 +75,23 @@ test('daily plan is shift-aware and counts completed habits', () => {
   assert.equal(plan.habitsCompleted, 1);
   assert.equal(plan.todayCount, 1);
 });
+
+test('daily plan respects an explicit three-priority limit', () => {
+  const plan = buildDailyPlan({
+    tasks: [
+      task({ id: 'late', dueDate: '2026-08-08', priority: 'p4' }),
+      task({ id: 'today', dueDate: '2026-08-09', priority: 'p3' }),
+      task({ id: 'p1', priority: 'p1' }),
+      task({ id: 'p2', priority: 'p2' }),
+      task({ id: 'future', dueDate: '2026-08-10', priority: 'p1' }),
+    ],
+    habits: [],
+    habitLogs: [],
+    today: '2026-08-09',
+    phase: 'work',
+    maxTasks: 3,
+  });
+
+  assert.equal(plan.focusTasks.length, 3);
+  assert.deepEqual(plan.focusTasks.map((item) => item.id), ['late', 'today', 'p1']);
+});
