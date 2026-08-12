@@ -91,4 +91,10 @@
   .tasks-full-compact input[type="text"] {
     min-width: 0;
   }
+
+  .lifeos-content .no-scrollbar > button {
+    min-height: 2rem !important;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
 }
