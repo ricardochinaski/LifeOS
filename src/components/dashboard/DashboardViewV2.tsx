@@ -16,7 +16,7 @@ import {
 import { useLifeOS } from '../../context/LifeOSContext';
 import { buildDailyPlan } from '../../lib/dailyPlan';
 import { dateOnlyToLocalDate, todayLocalDate } from '../../lib/dateOnly';
-import { isDemoBook, isDemoFinanceId, isDemoHealthLog } from '../../lib/demoData';
+import { isDemoBook, isDemoBudget, isDemoHealthLog } from '../../lib/demoData';
 import { ShiftDashboardCard } from './ShiftDashboardCard';
 import { TimerCard } from './TimerCard';
 
@@ -73,7 +73,7 @@ export const DashboardViewV2: React.FC = () => {
   const dateLabel = rawDateLabel.charAt(0).toUpperCase() + rawDateLabel.slice(1);
 
   const month = today.slice(0, 7);
-  const realBudgets = budgets.filter((budget) => !isDemoFinanceId(budget.id));
+  const realBudgets = budgets.filter((budget) => !isDemoBudget(budget));
   const monthExpenses = transactions
     .filter((transaction) => transaction.type === 'expense' && transaction.date.startsWith(month))
     .reduce((sum, transaction) => sum + transaction.amount, 0);
