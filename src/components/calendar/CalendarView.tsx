@@ -1,4 +1,5 @@
 import { formatLocalDate, todayLocalDate } from '../../lib/dateOnly';
+import { calculateShiftInfo } from '../../utils/shiftUtils';
 import React, { useState, useMemo } from 'react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import {
@@ -9,7 +10,7 @@ import {
 type CalendarFilter = 'tasks' | 'habits' | 'health' | 'shift' | 'finances';
 
 export const CalendarView: React.FC = () => {
-  const { tasks, habits, habitLogs, healthLogs, transactions, shiftConfig, shiftInfo } = useLifeOS();
+  const { tasks, habits, habitLogs, healthLogs, transactions, shiftConfig } = useLifeOS();
 
   const todayStr = todayLocalDate();
   const [monthOffset, setMonthOffset] = useState(0);
@@ -30,7 +31,6 @@ export const CalendarView: React.FC = () => {
 
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
-  const today = new Date(todayStr);
 
   const days: (string | null)[] = [];
   for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
@@ -85,13 +85,7 @@ export const CalendarView: React.FC = () => {
 
   const isShiftWorkDay = (dateStr: string) => {
     if (!shiftConfig.enabled) return null;
-    const anchor = new Date(shiftConfig.anchorDate);
-    const date = new Date(dateStr);
-    const diffDays = Math.round((date.getTime() - anchor.getTime()) / 86400000);
-    const cycleLen = shiftConfig.workDays + shiftConfig.restDays;
-    const dayInCycle = ((diffDays % cycleLen) + cycleLen) % cycleLen;
-    if (dayInCycle < shiftConfig.workDays) return 'work';
-    return 'rest';
+    return calculateShiftInfo(shiftConfig, dateStr).phase;
   };
 
   const getDayIndicator = (dateStr: string) => {
@@ -373,7 +367,7 @@ export const CalendarView: React.FC = () => {
                     Ingresos: ${selectedDayData.finances.income.toLocaleString('es-CL')}
                   </p>
                 )}
-                {selectedDayData.finances.expuse === 0 && selectedDayData.finances.income === 0 && (
+                {selectedDayData.finances.expense === 0 && selectedDayData.finances.income === 0 && (
                   <p className="text-xs text-slate-400">Sin movimiento</p>
                 )}
               </div>

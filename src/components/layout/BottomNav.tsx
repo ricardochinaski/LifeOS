@@ -4,6 +4,7 @@ import type { TabType } from '../../types';
 import {
   BookOpen,
   Bot,
+  CalendarDays,
   CheckSquare,
   Flame,
   HeartPulse,
@@ -23,17 +24,14 @@ export const BottomNav: React.FC = () => {
     setMoreOpen(false);
   };
 
-  const moreActive = activeTab === 'library' || activeTab === 'health' || activeTab === 'settings';
-
-  const primaryItems: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
-    { id: 'tasks', label: 'Tareas', icon: CheckSquare },
-    { id: 'habits', label: 'Hábitos', icon: Flame },
-  ];
+  const moreTabs: TabType[] = ['habits', 'finances', 'library', 'health', 'settings'];
+  const moreActive = moreTabs.includes(activeTab);
 
   const secondaryItems: { id: TabType; label: string; description: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'library', label: 'Lectura', description: 'Libros y sesiones', icon: BookOpen },
+    { id: 'habits', label: 'Hábitos', description: 'Rutinas y rachas', icon: Flame },
+    { id: 'finances', label: 'Finanzas', description: 'Cuentas y movimientos', icon: Wallet },
     { id: 'health', label: 'Salud', description: 'Registros y entrenos', icon: HeartPulse },
+    { id: 'library', label: 'Lectura', description: 'Libros y sesiones', icon: BookOpen },
     { id: 'settings', label: 'Ajustes', description: 'Cuenta e integraciones', icon: Settings },
   ];
 
@@ -113,21 +111,23 @@ export const BottomNav: React.FC = () => {
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="mx-auto flex h-16 max-w-xl items-center px-1">
-          {primaryItems.map(navButton)}
+          {navButton({ id: 'dashboard', label: 'Inicio', icon: LayoutDashboard })}
+          {navButton({ id: 'tasks', label: 'Tareas', icon: CheckSquare })}
 
-          <div className="flex h-full min-w-0 flex-1 items-center justify-center">
+          <div className="flex h-full min-w-0 flex-1 flex-col items-center justify-center">
             <button
               type="button"
               onClick={() => { setMoreOpen(false); openQuickCapture(); }}
-              className="-mt-5 flex h-14 w-14 flex-col items-center justify-center rounded-full border-4 border-white bg-emerald-500 text-slate-950 shadow-xl shadow-emerald-500/25 transition active:scale-95 dark:border-slate-900"
+              className="-mt-5 flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-emerald-500 text-slate-950 shadow-xl shadow-emerald-500/25 transition active:scale-95 dark:border-slate-900"
               aria-label="Capturar"
               title="Capturar"
             >
               <Plus className="h-6 w-6" />
             </button>
+            <span className="mt-0.5 text-[9px] font-bold leading-none text-slate-500 dark:text-slate-400">Capturar</span>
           </div>
 
-          {navButton({ id: 'finances', label: 'Finanzas', icon: Wallet })}
+          {navButton({ id: 'calendar', label: 'Calendario', icon: CalendarDays })}
 
           <button
             type="button"

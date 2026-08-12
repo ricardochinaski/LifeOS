@@ -19,6 +19,7 @@ import { HabitsOperationalView } from './components/habits/HabitsOperationalView
 import { FinancesOperationalView } from './components/finances/FinancesOperationalView';
 import { LibraryOperationalView } from './components/library/LibraryOperationalView';
 import { HealthOperationalView } from './components/health/HealthOperationalView';
+import { CalendarView } from './components/calendar/CalendarView';
 import { SettingsView } from './components/settings/SettingsView';
 
 const MainContent: React.FC = () => {
@@ -33,6 +34,7 @@ const MainContent: React.FC = () => {
         </>
       )}
       {activeTab === 'tasks' && <TasksOperationalView />}
+      {activeTab === 'calendar' && <CalendarView />}
       {activeTab === 'habits' && <HabitsOperationalView />}
       {activeTab === 'finances' && <FinancesOperationalView />}
       {activeTab === 'library' && <LibraryOperationalView />}
