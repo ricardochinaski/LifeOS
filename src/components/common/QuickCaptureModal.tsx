@@ -49,6 +49,7 @@ export const QuickCaptureModal: React.FC = () => {
     showToast,
     habits,
     habitLogs,
+    projects,
     accounts,
     books,
     readingSessions,
@@ -64,6 +65,7 @@ export const QuickCaptureModal: React.FC = () => {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskPriority, setTaskPriority] = useState<Priority>('p3');
   const [taskDateMode, setTaskDateMode] = useState<'today' | 'tomorrow' | 'none'>('today');
+  const [taskProjectId, setTaskProjectId] = useState('');
 
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDescription, setExpenseDescription] = useState('');
@@ -97,6 +99,7 @@ export const QuickCaptureModal: React.FC = () => {
     setInputText('');
     setLastResult(null);
     setTaskTitle('');
+    setTaskProjectId('');
     setExpenseAmount('');
     setExpenseDescription('');
     setNewHabitTitle('');
@@ -195,15 +198,17 @@ export const QuickCaptureModal: React.FC = () => {
       : taskDateMode === 'tomorrow'
         ? addDaysToDateOnly(today, 1)
         : undefined;
+    const project = taskProjectId ? projects.find((item) => item.id === taskProjectId) : undefined;
     addTask({
       title: taskTitle.trim(),
       status: 'todo',
       priority: taskPriority,
       dueDate,
-      areaId: 'area_work',
+      projectId: project?.id,
+      areaId: project?.areaId,
       subtasks: [],
     });
-    finish(`Tarea “${taskTitle.trim()}” creada.`);
+    finish(`Tarea “${taskTitle.trim()}” creada${project ? ` en ${project.name}` : ''}.`);
   };
 
   const submitExpense = (event: React.FormEvent) => {
@@ -351,6 +356,16 @@ export const QuickCaptureModal: React.FC = () => {
           {mode === 'task' && (
             <form onSubmit={submitTask} className="space-y-4">
               <input autoFocus value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="¿Qué necesitas hacer?" className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800" />
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Proyecto · opcional</label>
+                <select value={taskProjectId} onChange={(event) => setTaskProjectId(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800">
+                  <option value="">Sin proyecto</option>
+                  {projects.filter((project) => project.status !== 'completed').map((project) => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10px] text-slate-500">Si eliges un proyecto, LifeOS usará también su área. Sin proyecto, no se asigna un área artificialmente.</p>
+              </div>
               <div className="grid grid-cols-4 gap-2">
                 {(['p1', 'p2', 'p3', 'p4'] as Priority[]).map((priority) => (
                   <button type="button" key={priority} onClick={() => setTaskPriority(priority)} className={`rounded-xl border py-2 text-xs font-black uppercase ${taskPriority === priority ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-200 dark:border-slate-700'}`}>{priority}</button>
