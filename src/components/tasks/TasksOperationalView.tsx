@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, CheckSquare, Clock3, Plus, Target } from 'lucide-react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { todayLocalDate } from '../../lib/dateOnly';
@@ -9,6 +9,7 @@ import { TasksView } from './TasksView';
 type TaskFilter = 'due' | 'focus' | 'overdue' | 'all';
 
 const MOBILE_TASK_LIMIT = 8;
+const OPEN_FULL_KEY = 'lifeos_open_tasks_full';
 
 export const TasksOperationalView: React.FC = () => {
   const { tasks, projects, shiftInfo, toggleTaskStatus, openQuickCapture } = useLifeOS();
@@ -16,6 +17,18 @@ export const TasksOperationalView: React.FC = () => {
   const [filter, setFilter] = useState<TaskFilter>('due');
   const [showAll, setShowAll] = useState(false);
   const today = todayLocalDate();
+
+  useEffect(() => {
+    const openRequestedWorkspace = () => {
+      if (localStorage.getItem(OPEN_FULL_KEY)) {
+        localStorage.removeItem(OPEN_FULL_KEY);
+        setFullMode(true);
+      }
+    };
+    openRequestedWorkspace();
+    window.addEventListener('lifeos:open-tasks-full', openRequestedWorkspace);
+    return () => window.removeEventListener('lifeos:open-tasks-full', openRequestedWorkspace);
+  }, []);
 
   const ranked = useMemo(() => rankDailyTasks(tasks, today, shiftInfo.phase), [tasks, today, shiftInfo.phase]);
   const overdueCount = ranked.filter((task) => task.dueDate && task.dueDate < today).length;
@@ -35,7 +48,7 @@ export const TasksOperationalView: React.FC = () => {
 
   if (fullMode) {
     return (
-      <div>
+      <div className="tasks-full-compact">
         <FullModeBackButton onBack={() => setFullMode(false)} label="modo operativo" />
         <TasksView />
       </div>
