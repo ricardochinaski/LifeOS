@@ -13,7 +13,7 @@ const MOBILE_TASK_LIMIT = 8;
 export const TasksOperationalView: React.FC = () => {
   const { tasks, projects, shiftInfo, toggleTaskStatus, openQuickCapture } = useLifeOS();
   const [fullMode, setFullMode] = useState(false);
-  const [filter, setFilter] = useState<TaskFilter>('focus');
+  const [filter, setFilter] = useState<TaskFilter>('due');
   const [showAll, setShowAll] = useState(false);
   const today = todayLocalDate();
 
