@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Plus, Receipt, Wallet } from 'lucide-react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { todayLocalDate } from '../../lib/dateOnly';
-import { isDemoFinanceId } from '../../lib/demoData';
+import { isDemoAccount, isDemoBudget, isDemoDebt } from '../../lib/demoData';
 import { OperationalModeHeader, FullModeBackButton } from '../common/OperationalModeHeader';
 import { FinancesView, formatCLP } from './FinancesView';
 
@@ -19,9 +19,9 @@ export const FinancesOperationalView: React.FC = () => {
   const [fullMode, setFullMode] = useState(false);
   const month = todayLocalDate().slice(0, 7);
 
-  const realAccounts = useMemo(() => accounts.filter((item) => !isDemoFinanceId(item.id)), [accounts]);
-  const realBudgets = useMemo(() => budgets.filter((item) => !isDemoFinanceId(item.id)), [budgets]);
-  const realDebts = useMemo(() => debts.filter((item) => !isDemoFinanceId(item.id)), [debts]);
+  const realAccounts = useMemo(() => accounts.filter((item) => !isDemoAccount(item)), [accounts]);
+  const realBudgets = useMemo(() => budgets.filter((item) => !isDemoBudget(item)), [budgets]);
+  const realDebts = useMemo(() => debts.filter((item) => !isDemoDebt(item)), [debts]);
   const demoCount = accounts.length + budgets.length + debts.length - realAccounts.length - realBudgets.length - realDebts.length;
 
   const summary = useMemo(() => {
@@ -81,7 +81,7 @@ export const FinancesOperationalView: React.FC = () => {
 
       {demoCount > 0 && (
         <section className="rounded-2xl border border-amber-800/70 bg-amber-950/20 px-3 py-2.5 text-xs text-amber-200">
-          <span className="font-black">Datos demo ocultos.</span> {demoCount} seeds financieros no participan en balance, deuda ni alertas operativas.
+          <span className="font-black">Datos demo ocultos.</span> {demoCount} seeds financieros intactos no participan en balance, deuda ni alertas operativas. Si editas uno, pasa a considerarse dato real.
         </section>
       )}
 
