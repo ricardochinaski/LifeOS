@@ -12,7 +12,6 @@ import { PersonalDailySetupCard } from './components/common/PersonalDailySetupCa
 import { DemoDataGuardCard } from './components/common/DemoDataGuardCard';
 import { GoogleCalendarSyncModal } from './components/integrations/GoogleCalendarSyncModal';
 import { PushNotificationsModal } from './components/integrations/PushNotificationsModal';
-import { Bot } from 'lucide-react';
 
 import { DashboardViewV2 } from './components/dashboard/DashboardViewV2';
 import { TasksOperationalView } from './components/tasks/TasksOperationalView';
@@ -50,7 +49,7 @@ const MainContent: React.FC = () => {
 
 const AppContent: React.FC = () => {
   const {
-    isAICopilotOpen, openAICopilot, closeAICopilot,
+    isAICopilotOpen, closeAICopilot,
     isVoiceModalOpen, closeVoiceModal,
     isCalendarModalOpen, closeCalendarModal,
     isNotificationsModalOpen, closeNotificationsModal,
@@ -90,16 +89,6 @@ const AppContent: React.FC = () => {
       <CommandPalette />
       <GoogleCalendarSyncModal isOpen={isCalendarModalOpen} onClose={closeCalendarModal} />
       <PushNotificationsModal isOpen={isNotificationsModalOpen} onClose={closeNotificationsModal} />
-
-      <button
-        onClick={openAICopilot}
-        className="fixed bottom-24 right-6 z-30 hidden h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 sm:flex"
-        title="LifeOS Copilot IA"
-        aria-label="Abrir LifeOS Copilot IA"
-      >
-        <Bot className="h-5 w-5" />
-      </button>
-
       <BottomNav />
     </div>
   );
