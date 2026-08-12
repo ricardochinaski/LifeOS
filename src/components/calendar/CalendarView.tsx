@@ -15,7 +15,7 @@ export const CalendarView: React.FC = () => {
   const todayStr = todayLocalDate();
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [activeFilters, setActiveFilters] = useState<Set<CalendarFilter>>(new Set(['tasks', 'habits', 'health', 'shift']));
+  const [activeFilters, setActiveFilters] = useState<Set<CalendarFilter>>(new Set(['shift']));
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const toggleFilter = (f: CalendarFilter) => {
@@ -140,7 +140,10 @@ export const CalendarView: React.FC = () => {
           </div>
           <div>
             <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-400">Calendario</span>
-            <h1 className="text-2xl font-black tracking-tight">Vista Mensual</h1>
+            <h1 className="text-2xl font-black tracking-tight">Calendario operativo</h1>
+            <p className="mt-1 max-w-2xl text-[11px] leading-5 text-slate-400">
+              Turno 14×14 visible por defecto. Tareas, hábitos, salud y finanzas son capas opcionales de consulta; no se convierten en eventos.
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2 relative z-10">
@@ -156,6 +159,7 @@ export const CalendarView: React.FC = () => {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <Filter className="w-4 h-4 text-slate-400 mr-1" />
+        <span className="mr-1 text-[10px] font-black uppercase tracking-wider text-slate-400">Capas</span>
         {filterOptions.map(f => {
           const Icon = f.icon;
           const isActive = activeFilters.has(f.key);
@@ -378,7 +382,7 @@ export const CalendarView: React.FC = () => {
 
       {/* Legend */}
       <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">Leyenda</p>
+        <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">Capas y turno</p>
         <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Tareas</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" /> Hábitos</span>
