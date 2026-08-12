@@ -2,9 +2,9 @@ import React, { useEffect } from 'react';
 import { LifeOSProvider, useLifeOS } from './context/LifeOSContext';
 import { Navbar } from './components/layout/Navbar';
 import { BottomNav } from './components/layout/BottomNav';
-import { QuickCaptureModal } from './components/common/QuickCaptureModal';
+import { QuickCaptureModalV2 } from './components/common/QuickCaptureModalV2';
 import { ShiftCalibrationModal } from './components/common/ShiftCalibrationModal';
-import { AICopilotModal } from './components/common/AICopilotModal';
+import { AICopilotModalV2 } from './components/common/AICopilotModalV2';
 import { VoiceCommandModal } from './components/common/VoiceCommandModal';
 import { CommandPalette } from './components/common/CommandPalette';
 import { DailyAutomationBridge } from './components/common/DailyAutomationBridge';
@@ -66,8 +66,6 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (localStorage.getItem(PERSONAL_VISUAL_DEFAULTS_KEY) === 'done') return;
 
-    // Wait until LifeOS has had a chance to hydrate saved settings before applying
-    // this one-time personal environment decision. Future user changes are respected.
     const timer = window.setTimeout(() => {
       if (!darkMode) toggleDarkMode();
       if (appSettings.uiDensity !== 'compact') updateAppSettings({ uiDensity: 'compact' });
@@ -82,9 +80,9 @@ const AppContent: React.FC = () => {
       <DailyAutomationBridge />
       <Navbar />
       <MainContent />
-      <QuickCaptureModal />
+      <QuickCaptureModalV2 />
       <ShiftCalibrationModal />
-      <AICopilotModal isOpen={isAICopilotOpen} onClose={closeAICopilot} />
+      <AICopilotModalV2 isOpen={isAICopilotOpen} onClose={closeAICopilot} />
       <VoiceCommandModal isOpen={isVoiceModalOpen} onClose={closeVoiceModal} />
       <CommandPalette />
       <GoogleCalendarSyncModal isOpen={isCalendarModalOpen} onClose={closeCalendarModal} />
