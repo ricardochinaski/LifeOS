@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import './personal-refinement.css';
 import { LifeOSProvider, useLifeOS } from './context/LifeOSContext';
 import { Navbar } from './components/layout/Navbar';
 import { BottomNav } from './components/layout/BottomNav';
