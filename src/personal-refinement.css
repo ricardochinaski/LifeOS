@@ -1,0 +1,94 @@
+.tasks-full-compact > div {
+  gap: 0.75rem;
+}
+
+.tasks-full-compact > div > div:first-child {
+  gap: 0.75rem !important;
+  padding: 0.75rem !important;
+  border-radius: 1rem !important;
+}
+
+.tasks-full-compact > div > div:first-child h1 {
+  font-size: 1rem !important;
+  line-height: 1.4rem !important;
+}
+
+.tasks-full-compact > div > div:first-child p {
+  display: none;
+}
+
+.tasks-full-compact > div > div:first-child button {
+  min-height: 2rem;
+}
+
+.tasks-full-compact [class*="lg:grid-cols-6"] {
+  gap: 0.5rem !important;
+}
+
+.tasks-full-compact [class*="lg:grid-cols-6"] > div {
+  padding: 0.5rem !important;
+  border-radius: 0.875rem !important;
+}
+
+.tasks-full-compact [class*="lg:grid-cols-6"] p:first-child {
+  font-size: 0.95rem !important;
+}
+
+.tasks-full-compact [class*="overflow-x-auto"] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tasks-full-compact [class*="overflow-x-auto"]::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 640px) {
+  .tasks-full-compact > div > div:first-child {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  .tasks-full-compact > div > div:first-child > div:first-child {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .tasks-full-compact > div > div:first-child > div:last-child {
+    width: auto;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tasks-full-compact > div > div:first-child > div:last-child::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tasks-full-compact > div > div:first-child > div:last-child button {
+    flex-shrink: 0;
+    padding: 0.45rem 0.65rem !important;
+  }
+
+  .tasks-full-compact [class*="lg:grid-cols-6"] {
+    display: flex !important;
+    overflow-x: auto;
+    padding-bottom: 0.125rem;
+    scrollbar-width: none;
+  }
+
+  .tasks-full-compact [class*="lg:grid-cols-6"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tasks-full-compact [class*="lg:grid-cols-6"] > div {
+    min-width: 5.75rem;
+    flex: 0 0 auto;
+  }
+
+  .tasks-full-compact input[type="text"] {
+    min-width: 0;
+  }
+}
