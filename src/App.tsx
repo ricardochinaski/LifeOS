@@ -9,6 +9,7 @@ import { VoiceCommandModal } from './components/common/VoiceCommandModal';
 import { CommandPalette } from './components/common/CommandPalette';
 import { DailyAutomationBridge } from './components/common/DailyAutomationBridge';
 import { PersonalDailySetupCard } from './components/common/PersonalDailySetupCard';
+import { DemoDataGuardCard } from './components/common/DemoDataGuardCard';
 import { GoogleCalendarSyncModal } from './components/integrations/GoogleCalendarSyncModal';
 import { PushNotificationsModal } from './components/integrations/PushNotificationsModal';
 import { Bot } from 'lucide-react';
@@ -32,6 +33,7 @@ const MainContent: React.FC = () => {
       {activeTab === 'dashboard' && (
         <>
           <PersonalDailySetupCard />
+          <DemoDataGuardCard />
           <DashboardViewV2 />
         </>
       )}
