@@ -42,8 +42,13 @@ export const Navbar: React.FC = () => {
       month: 'long',
       year: 'numeric'
     };
-    return d.toLocaleDateString('es-ES', options);
+    const label = d.toLocaleDateString('es-CL', options);
+    return label.charAt(0).toUpperCase() + label.slice(1);
   };
+
+  const visibleToastMessage = toastMessage?.startsWith('Datos cargados desde la nube (')
+    ? 'Datos sincronizados desde la nube.'
+    : toastMessage;
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50/90 backdrop-blur-md transition-colors dark:border-slate-800 dark:bg-slate-900/90">
@@ -59,7 +64,7 @@ export const Navbar: React.FC = () => {
                 2.4
               </span>
             </div>
-            <p className="hidden text-xs capitalize text-slate-500 dark:text-slate-400 sm:block">
+            <p className="hidden text-xs text-slate-500 dark:text-slate-400 sm:block">
               {getTodayFormatted()}
             </p>
           </div>
@@ -153,7 +158,7 @@ export const Navbar: React.FC = () => {
 
           <button
             onClick={openQuickCapture}
-            className="hidden h-10 items-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-black text-slate-950 shadow-sm transition-all hover:bg-emerald-400 md:flex"
+            className="hidden h-10 items-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-black text-slate-950 shadow-sm transition-all hover:bg-emerald-400 lg:flex"
             title="Captura rápida"
           >
             <Plus className="h-4 w-4" />
@@ -183,10 +188,10 @@ export const Navbar: React.FC = () => {
           </button>
         </div>
 
-        {toastMessage && (
+        {visibleToastMessage && (
           <div className="absolute right-3 top-[calc(100%+0.5rem)] z-50 flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 shadow-xl animate-fade-in dark:border-emerald-800 dark:bg-emerald-950/95 dark:text-emerald-200 sm:right-6 sm:max-w-sm">
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span className="line-clamp-2">{toastMessage}</span>
+            <span className="line-clamp-2">{visibleToastMessage}</span>
           </div>
         )}
       </div>

@@ -254,7 +254,7 @@ export interface BookNote {
   tags?: string[];
 }
 
-export type TabType = 'dashboard' | 'tasks' | 'habits' | 'finances' | 'library' | 'health' | 'settings';
+export type TabType = 'dashboard' | 'tasks' | 'calendar' | 'habits' | 'finances' | 'library' | 'health' | 'settings';
 
 export interface AppCustomSettings {
   primaryColor: 'emerald' | 'blue' | 'purple' | 'amber' | 'rose';

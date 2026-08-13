@@ -33,6 +33,11 @@ interface PushNotificationsModalProps {
   onClose: () => void;
 }
 
+const formatReminderDate = (date: string) =>
+  new Date(`${date}T12:00:00`)
+    .toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
+    .replace('.', '');
+
 export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({ isOpen, onClose }) => {
   const { showToast, tasks, habits, habitLogs, shiftConfig } = useLifeOS();
   const [permission, setPermission] = useState<NotificationPermission>('default');
@@ -156,6 +161,7 @@ export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({ 
       </div>
       <input
         type="time"
+        lang="en-GB"
         value={settings[timeKey]}
         disabled={!settings[enabledKey]}
         onChange={(event) => update(timeKey, event.target.value)}
@@ -222,7 +228,7 @@ export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({ 
         </div>
 
         <div className="space-y-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Ritmo diario</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Ritmo diario · 24 h</p>
           {slotRow(<Sunrise className="h-4 w-4" />, 'Inicio del día', 'Turno actual, atrasos y primera prioridad.', 'morningEnabled', 'morningTime')}
           {slotRow(<SunMedium className="h-4 w-4" />, 'Chequeo de foco', 'Tareas prioritarias y hábitos previstos aún por revisar.', 'middayEnabled', 'middayTime')}
           {slotRow(<MoonStar className="h-4 w-4" />, 'Cierre y preparación', 'Cierre del día y primera prioridad del día siguiente.', 'eveningEnabled', 'eveningTime')}
@@ -233,7 +239,7 @@ export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({ 
               <p className="text-xs font-bold">Cambio Faena / Descanso</p>
               <p className="text-[10px] text-slate-400">Aviso solo cuando el día siguiente cambia de fase.</p>
             </div>
-            <input type="time" value={settings.shiftAlertTime} disabled={!settings.shiftChangeAlerts} onChange={(event) => update('shiftAlertTime', event.target.value)} className="w-[92px] rounded-xl border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white disabled:opacity-40" />
+            <input type="time" lang="en-GB" value={settings.shiftAlertTime} disabled={!settings.shiftChangeAlerts} onChange={(event) => update('shiftAlertTime', event.target.value)} className="w-[92px] rounded-xl border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white disabled:opacity-40" />
             <input type="checkbox" checked={settings.shiftChangeAlerts} onChange={(event) => update('shiftChangeAlerts', event.target.checked)} className="h-4 w-4 accent-amber-500" />
           </div>
         </div>
@@ -252,7 +258,7 @@ export const PushNotificationsModal: React.FC<PushNotificationsModalProps> = ({ 
                 <p className="truncate font-bold text-white">{item.title}</p>
                 <p className="truncate text-[10px] text-slate-400">{item.body}</p>
               </div>
-              <span className="shrink-0 text-[10px] font-bold text-emerald-300">{item.date.slice(5)} · {item.time}</span>
+              <span className="shrink-0 text-[10px] font-bold text-emerald-300">{formatReminderDate(item.date)} · {item.time}</span>
             </div>
           ))}
         </div>
