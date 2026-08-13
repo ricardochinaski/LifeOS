@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckSquare, Flame, Keyboard, Plus, Search, Wallet, X } from 'lucide-react';
+import { CheckSquare, Dumbbell, Flame, Keyboard, Plus, Search, Wallet, X } from 'lucide-react';
 import { useLifeOS } from '../../context/LifeOSContext';
 import { TabType } from '../../types';
 
@@ -7,6 +7,7 @@ const destinations: { tab: TabType; label: string; icon: React.ElementType }[] =
   { tab: 'dashboard', label: 'Abrir centro diario', icon: Keyboard },
   { tab: 'tasks', label: 'Ir a tareas', icon: CheckSquare },
   { tab: 'habits', label: 'Ir a hábitos', icon: Flame },
+  { tab: 'health', label: 'Ir a entrenamientos', icon: Dumbbell },
   { tab: 'finances', label: 'Ir a finanzas', icon: Wallet },
 ];
 
@@ -30,7 +31,7 @@ export const CommandPalette: React.FC = () => {
   if (!open) return null;
   const items = [
     ...destinations.map(item => ({ ...item, action: () => setActiveTab(item.tab) })),
-    { label: 'Capturar tarea, gasto o hábito', icon: Plus, action: openQuickCapture },
+    { label: 'Capturar tarea, gasto, entreno o hábito', icon: Plus, action: openQuickCapture },
   ].filter(item => item.label.toLowerCase().includes(query.toLowerCase()));
 
   const select = (action: () => void) => {
@@ -50,9 +51,7 @@ export const CommandPalette: React.FC = () => {
         <div className="p-2">
           {items.map(item => {
             const Icon = item.icon;
-            return <button key={item.label} onClick={() => select(item.action)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-slate-200 hover:bg-slate-800">
-              <Icon className="w-4 h-4 text-emerald-400" />{item.label}
-            </button>;
+            return <button key={item.label} onClick={() => select(item.action)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-slate-200 hover:bg-slate-800"><Icon className="w-4 h-4 text-emerald-400" />{item.label}</button>;
           })}
           {items.length === 0 && <p className="p-4 text-center text-xs text-slate-500">No hay acciones que coincidan.</p>}
         </div>
