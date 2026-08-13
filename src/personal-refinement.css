@@ -45,6 +45,10 @@
   height: 0;
 }
 
+.training-settings > div > div.grid > div:first-child > div > button:nth-of-type(4) {
+  display: none !important;
+}
+
 @media (max-width: 640px) {
   .tasks-full-compact > div > div:first-child {
     flex-direction: row !important;
