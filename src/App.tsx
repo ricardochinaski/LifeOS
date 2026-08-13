@@ -19,7 +19,7 @@ import { TasksOperationalView } from './components/tasks/TasksOperationalView';
 import { HabitsOperationalView } from './components/habits/HabitsOperationalView';
 import { FinancesOperationalView } from './components/finances/FinancesOperationalView';
 import { LibraryOperationalView } from './components/library/LibraryOperationalView';
-import { HealthOperationalView } from './components/health/HealthOperationalView';
+import { TrainingView } from './components/training/TrainingView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { SettingsView } from './components/settings/SettingsView';
 import { AIBackendStatusCard } from './components/settings/AIBackendStatusCard';
@@ -43,7 +43,7 @@ const MainContent: React.FC = () => {
       {activeTab === 'habits' && <HabitsOperationalView />}
       {activeTab === 'finances' && <FinancesOperationalView />}
       {activeTab === 'library' && <LibraryOperationalView />}
-      {activeTab === 'health' && <HealthOperationalView />}
+      {activeTab === 'health' && <TrainingView />}
       {activeTab === 'settings' && (
         <div className="space-y-3">
           <AIBackendStatusCard />
