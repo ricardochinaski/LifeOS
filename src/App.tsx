@@ -22,6 +22,7 @@ import { LibraryOperationalView } from './components/library/LibraryOperationalV
 import { HealthOperationalView } from './components/health/HealthOperationalView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { SettingsView } from './components/settings/SettingsView';
+import { AIBackendStatusCard } from './components/settings/AIBackendStatusCard';
 
 const PERSONAL_VISUAL_DEFAULTS_KEY = 'lifeos_personal_visual_defaults_v1';
 
@@ -43,7 +44,12 @@ const MainContent: React.FC = () => {
       {activeTab === 'finances' && <FinancesOperationalView />}
       {activeTab === 'library' && <LibraryOperationalView />}
       {activeTab === 'health' && <HealthOperationalView />}
-      {activeTab === 'settings' && <SettingsView />}
+      {activeTab === 'settings' && (
+        <div className="space-y-3">
+          <AIBackendStatusCard />
+          <SettingsView />
+        </div>
+      )}
     </main>
   );
 };
