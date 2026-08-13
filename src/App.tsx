@@ -45,7 +45,7 @@ const MainContent: React.FC = () => {
       {activeTab === 'library' && <LibraryOperationalView />}
       {activeTab === 'health' && <TrainingView />}
       {activeTab === 'settings' && (
-        <div className="space-y-3">
+        <div className="training-settings space-y-3">
           <AIBackendStatusCard />
           <SettingsView />
         </div>
@@ -72,13 +72,11 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (localStorage.getItem(PERSONAL_VISUAL_DEFAULTS_KEY) === 'done') return;
-
     const timer = window.setTimeout(() => {
       if (!darkMode) toggleDarkMode();
       if (appSettings.uiDensity !== 'compact') updateAppSettings({ uiDensity: 'compact' });
       localStorage.setItem(PERSONAL_VISUAL_DEFAULTS_KEY, 'done');
     }, 0);
-
     return () => window.clearTimeout(timer);
   }, [appSettings.uiDensity, darkMode, toggleDarkMode, updateAppSettings]);
 
@@ -100,9 +98,5 @@ const AppContent: React.FC = () => {
 };
 
 export default function App() {
-  return (
-    <LifeOSProvider>
-      <AppContent />
-    </LifeOSProvider>
-  );
+  return <LifeOSProvider><AppContent /></LifeOSProvider>;
 }
