@@ -7,9 +7,9 @@ import {
   Bot,
   CalendarDays,
   CheckSquare,
+  Dumbbell,
   Flame,
   FolderKanban,
-  HeartPulse,
   LayoutDashboard,
   MoreHorizontal,
   Pickaxe,
@@ -51,7 +51,7 @@ export const BottomNav: React.FC = () => {
 
   const moduleItems: { id: TabType; label: string; description: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'habits', label: 'Hábitos', description: 'Rutinas y rachas', icon: Flame },
-    { id: 'health', label: 'Salud', description: 'Registros y entrenamiento', icon: HeartPulse },
+    { id: 'health', label: 'Entrenamientos', description: 'Sesiones, ejercicios y progreso', icon: Dumbbell },
     { id: 'finances', label: 'Finanzas', description: 'Cuentas y movimientos', icon: Wallet },
     { id: 'library', label: 'Biblioteca', description: 'Libros y sesiones', icon: BookOpen },
   ];
