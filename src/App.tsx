@@ -14,7 +14,7 @@ import { DemoDataGuardCard } from './components/common/DemoDataGuardCard';
 import { GoogleCalendarSyncModal } from './components/integrations/GoogleCalendarSyncModal';
 import { PushNotificationsModal } from './components/integrations/PushNotificationsModal';
 
-import { DashboardViewV2 } from './components/dashboard/DashboardViewV2';
+import { DashboardTrainingView } from './components/dashboard/DashboardTrainingView';
 import { TasksOperationalView } from './components/tasks/TasksOperationalView';
 import { HabitsOperationalView } from './components/habits/HabitsOperationalView';
 import { FinancesOperationalView } from './components/finances/FinancesOperationalView';
@@ -35,7 +35,7 @@ const MainContent: React.FC = () => {
         <>
           <PersonalDailySetupCard />
           <DemoDataGuardCard />
-          <DashboardViewV2 />
+          <DashboardTrainingView />
         </>
       )}
       {activeTab === 'tasks' && <TasksOperationalView />}
